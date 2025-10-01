@@ -1,0 +1,21 @@
+{
+  "name": "karaoke-arcade-backend",
+  "version": "1.0.0",
+  "description": "Retro arcade karaoke web app backend",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "ws": "^8.14.2",
+    "sqlite3": "^5.1.6",
+    "uuid": "^9.0.1"
+  },
+  "keywords": ["karaoke", "audio", "analysis", "websocket"],
+  "author": "Karaoke Arcade Team",
+  "license": "MIT"
+}
