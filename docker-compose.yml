@@ -1,0 +1,33 @@
+services:
+  karaoke-arcade:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: karaoke-arcade
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist songs across container restarts
+      - ./songs:/app/songs
+      # Persist database
+      - karaoke-db:/app/backend/karaoke.db
+      # Persist sessions
+      - ./sessions:/app/sessions
+      # Persist uploads
+      - ./backend/uploads:/app/backend/uploads
+    environment:
+      - DEVICE=cpu
+      - PORT=8080
+      - NODE_ENV=production
+    restart: unless-stopped
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  karaoke-db:
+

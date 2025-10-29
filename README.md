@@ -46,6 +46,26 @@ Built for MacBook Pro (M3 Pro) - plays YouTube karaoke videos with professional-
 
 ## 🚀 Quick Start
 
+### 🐳 Option 1: Docker (Easiest!)
+
+**Want to skip all the installation?** Use Docker:
+
+```bash
+# Just run this!
+./docker-start.sh
+
+# Open in browser
+open http://localhost:8080
+```
+
+📖 **Full Docker guide**: See [DOCKER.md](DOCKER.md)
+
+**Note**: Docker uses CPU mode (slower preprocessing but works on any machine!)
+
+---
+
+### 💻 Option 2: Native Installation
+
 ### Prerequisites
 - **macOS 12.3+** (for Metal Performance Shaders)
 - **Node.js 20+**
@@ -94,6 +114,12 @@ open http://localhost:8080
 5. **Sing and get scored!**
 
 📖 **Detailed guide**: See [QUICKSTART.md](QUICKSTART.md)
+
+---
+
+### 🐳 Docker Alternative
+
+**Prefer Docker?** Check out [DOCKER.md](DOCKER.md) for container-based setup (works on any OS!).
 
 ## 🎮 How to Use
 

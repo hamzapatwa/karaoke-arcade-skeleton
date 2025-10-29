@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+
+# Node modules
+node_modules
+**/node_modules
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+venv/
+ENV/
+
+# Build artifacts
+dist
+build
+
+# Logs
+*.log
+server.log
+
+# Database
+*.db
+*.db-journal
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+test
+tests
+
+# Demo tracks
+demo_tracks/
+
+# Sessions (will be created in container)
+sessions/
+backend/uploads/
+
+# References will be created at runtime
+backend/references/
+
+# Don't copy existing songs (they'll be in the volume)
+songs/
+
