@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import Leaderboard from './Leaderboard';
 
-export default function ResultsScreen({ sessionId, apiBase, onNewSession, playerName, onPlayerNameChange }) {
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default function ResultsScreen({ sessionId, results: propResults, apiBase, onNewSession, playerName, onPlayerNameChange }) {
+  const [results, setResults] = useState(propResults || null);
+  const [loading, setLoading] = useState(!propResults && !!sessionId);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    if (sessionId) {
+    if (propResults) {
+      setResults(propResults);
+      setLoading(false);
+    } else if (sessionId) {
       loadResults();
     }
-  }, [sessionId]);
+  }, [sessionId, propResults]);
 
   const loadResults = async () => {
     try {
-      const response = await fetch(`${apiBase}/session/results/${sessionId}`);
+      const response = await fetch(`${apiBase}/sessions/${sessionId}/results`);
       const data = await response.json();
-      setResults(data);
+      setResults(data.results || data);
     } catch (error) {
       console.error('Failed to load results:', error);
     } finally {
@@ -157,17 +160,6 @@ export default function ResultsScreen({ sessionId, apiBase, onNewSession, player
                 </div>
                 <span className="score-value">{Math.round(results.totals.energy)}</span>
               </div>
-
-              <div className="score-item">
-                <span className="score-label">MOTION</span>
-                <div className="score-bar">
-                  <div
-                    className="score-fill motion"
-                    style={{ width: `${results.totals.motion}%` }}
-                  ></div>
-                </div>
-                <span className="score-value">{Math.round(results.totals.motion)}</span>
-              </div>
             </div>
           </div>
 
@@ -203,16 +195,21 @@ export default function ResultsScreen({ sessionId, apiBase, onNewSession, player
                 <h3>Pitch Timeline</h3>
                 <div className="chart">
                   <svg width="100%" height="200" className="pitch-chart">
-                    {results.graphs.pitchTimeline.map((point, index) => (
-                      <circle
-                        key={index}
-                        cx={`${(point.time / Math.max(...results.graphs.pitchTimeline.map(p => p.time))) * 100}%`}
-                        cy={`${100 - (point.score / 100) * 80}%`}
-                        r="2"
-                        fill="#39ff14"
-                        opacity="0.7"
-                      />
-                    ))}
+                    {results.graphs.pitchTimeline.map((point, index) => {
+                      const maxTime = Math.max(...results.graphs.pitchTimeline.map(p => p.time || 0)) || 1;
+                      const x = ((point.time || 0) / maxTime) * 100;
+                      const y = 100 - ((point.score || 0) / 100) * 80;
+                      return (
+                        <circle
+                          key={index}
+                          cx={`${x}%`}
+                          cy={`${y}%`}
+                          r="2"
+                          fill="#39ff14"
+                          opacity="0.7"
+                        />
+                      );
+                    })}
                   </svg>
                 </div>
               </div>
@@ -222,9 +219,12 @@ export default function ResultsScreen({ sessionId, apiBase, onNewSession, player
                 <div className="chart">
                   <svg width="100%" height="200" className="energy-chart">
                     <polyline
-                      points={results.graphs.energyGraph.map((point, index) =>
-                        `${(point.time / Math.max(...results.graphs.energyGraph.map(p => p.time))) * 100}%,${100 - point.energy * 100}%`
-                      ).join(' ')}
+                      points={(() => {
+                        const maxTime = Math.max(...results.graphs.energyGraph.map(p => p.time || 0)) || 1;
+                        return results.graphs.energyGraph.map((point) =>
+                          `${((point.time || 0) / maxTime) * 100}%,${100 - (point.energy || 0) * 100}%`
+                        ).join(' ');
+                      })()}
                       fill="none"
                       stroke="#ff00e6"
                       strokeWidth="2"
@@ -237,17 +237,21 @@ export default function ResultsScreen({ sessionId, apiBase, onNewSession, player
                 <h3>Rhythm Heatmap</h3>
                 <div className="chart">
                   <svg width="100%" height="200" className="rhythm-chart">
-                    {results.graphs.rhythmHeatmap.map((point, index) => (
-                      <rect
-                        key={index}
-                        x={`${(point.time / Math.max(...results.graphs.rhythmHeatmap.map(p => p.time))) * 100}%`}
-                        y="50%"
-                        width="1%"
-                        height="50%"
-                        fill={point.onBeat ? '#00e5ff' : '#ff3d00'}
-                        opacity="0.8"
-                      />
-                    ))}
+                    {results.graphs.rhythmHeatmap.map((point, index) => {
+                      const maxTime = Math.max(...results.graphs.rhythmHeatmap.map(p => p.time || 0)) || 1;
+                      const x = ((point.time || 0) / maxTime) * 100;
+                      return (
+                        <rect
+                          key={index}
+                          x={`${x}%`}
+                          y="50%"
+                          width="1%"
+                          height="50%"
+                          fill={point.onBeat ? '#00e5ff' : '#ff3d00'}
+                          opacity="0.8"
+                        />
+                      );
+                    })}
                   </svg>
                 </div>
               </div>

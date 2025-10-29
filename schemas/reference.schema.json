@@ -1,75 +1,251 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "reference.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Karaoke Reference Data",
+  "description": "Enhanced reference data with DTW alignment, warped pitch contour, and note bins",
   "type": "object",
+  "required": [
+    "version",
+    "song_id",
+    "fps",
+    "duration",
+    "beats_k",
+    "phrases_k",
+    "warp_T",
+    "f0_ref_on_k",
+    "note_bins",
+    "key"
+  ],
   "properties": {
-    "beats": {
+    "version": {
+      "type": "string",
+      "description": "Schema version",
+      "enum": ["2.0"]
+    },
+    "song_id": {
+      "type": "string",
+      "description": "Unique song identifier"
+    },
+    "fps": {
+      "type": "number",
+      "description": "Frame rate for dense arrays (typically 50 Hz)",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "duration": {
+      "type": "number",
+      "description": "Duration in seconds (karaoke timeline)",
+      "minimum": 0
+    },
+    "sample_rate": {
+      "type": "integer",
+      "description": "Audio sample rate (typically 48000)"
+    },
+    "hop_length": {
+      "type": "integer",
+      "description": "Hop length for feature extraction"
+    },
+    "beats_k": {
       "type": "array",
+      "description": "Beat times on karaoke timeline (seconds)",
       "items": {
-        "type": "number"
+        "type": "number",
+        "minimum": 0
       }
     },
-    "downbeats": {
+    "downbeats_k": {
       "type": "array",
+      "description": "Downbeat times on karaoke timeline (seconds)",
       "items": {
-        "type": "number"
+        "type": "number",
+        "minimum": 0
       }
     },
-    "phrases": {
+    "tempo": {
+      "type": "number",
+      "description": "Tempo in BPM",
+      "minimum": 20,
+      "maximum": 300
+    },
+    "phrases_k": {
       "type": "array",
+      "description": "Musical phrases on karaoke timeline",
       "items": {
         "type": "object",
+        "required": ["id", "start", "end"],
         "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Phrase ID"
+          },
           "start": {
-            "type": "number"
+            "type": "number",
+            "description": "Phrase start time (seconds)",
+            "minimum": 0
           },
           "end": {
+            "type": "number",
+            "description": "Phrase end time (seconds)",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "warp_T": {
+      "type": "object",
+      "description": "DTW alignment mapping from karaoke to reference timeline",
+      "required": ["tk", "tref", "quality", "segments"],
+      "properties": {
+        "tk": {
+          "type": "array",
+          "description": "Karaoke timeline grid (seconds)",
+          "items": {
             "type": "number"
           }
         },
-        "required": [
-          "start",
-          "end"
-        ]
+        "tref": {
+          "type": "array",
+          "description": "Corresponding reference times (seconds)",
+          "items": {
+            "type": "number"
+          }
+        },
+        "quality": {
+          "type": "number",
+          "description": "Overall alignment quality (0-1)",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "segments": {
+          "type": "array",
+          "description": "Piecewise linear alignment segments",
+          "items": {
+            "type": "object",
+            "required": ["tk_start", "tk_end", "a", "b", "quality"],
+            "properties": {
+              "tk_start": {
+                "type": "number",
+                "description": "Segment start time (karaoke)"
+              },
+              "tk_end": {
+                "type": "number",
+                "description": "Segment end time (karaoke)"
+              },
+              "a": {
+                "type": "number",
+                "description": "Slope: tref = a * tk + b"
+              },
+              "b": {
+                "type": "number",
+                "description": "Intercept: tref = a * tk + b"
+              },
+              "quality": {
+                "type": "number",
+                "description": "Segment R² score",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
       }
     },
-    "refPitchHz": {
+    "f0_ref_on_k": {
       "type": "array",
+      "description": "Warped reference pitch on karaoke timeline",
       "items": {
-        "type": "number"
+        "type": "object",
+        "required": ["t", "f0", "conf"],
+        "properties": {
+          "t": {
+            "type": "number",
+            "description": "Time on karaoke timeline (seconds)",
+            "minimum": 0
+          },
+          "f0": {
+            "type": "number",
+            "description": "Fundamental frequency (Hz)",
+            "minimum": 0,
+            "maximum": 2000
+          },
+          "conf": {
+            "type": "number",
+            "description": "Pitch confidence",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "note_bins": {
+      "type": "array",
+      "description": "Discrete note bins for scoring",
+      "items": {
+        "type": "object",
+        "required": ["start", "end", "f0", "tol_cents"],
+        "properties": {
+          "start": {
+            "type": "number",
+            "description": "Note start time (seconds)",
+            "minimum": 0
+          },
+          "end": {
+            "type": "number",
+            "description": "Note end time (seconds)",
+            "minimum": 0
+          },
+          "f0": {
+            "type": "number",
+            "description": "Median frequency (Hz)",
+            "minimum": 0
+          },
+          "tol_cents": {
+            "type": "number",
+            "description": "Tolerance in cents",
+            "default": 40
+          }
+        }
       }
     },
     "key": {
-      "type": "string"
+      "type": "string",
+      "description": "Musical key (e.g., 'G# minor')"
     },
-    "sections": {
+    "loudness_ref": {
       "type": "array",
+      "description": "Loudness profile for energy scoring",
       "items": {
         "type": "object",
+        "required": ["t", "LUFS"],
         "properties": {
-          "start": {
-            "type": "number"
+          "t": {
+            "type": "number",
+            "description": "Time (seconds)"
           },
-          "label": {
-            "type": "string"
+          "LUFS": {
+            "type": "number",
+            "description": "Loudness in LUFS"
           }
-        },
-        "required": [
-          "start",
-          "label"
-        ]
+        }
       }
     },
-    "loudness": {
-      "type": "array",
-      "items": {
-        "type": "number"
+    "config": {
+      "type": "object",
+      "description": "Preprocessing configuration",
+      "properties": {
+        "pitch_conf_threshold": {
+          "type": "number",
+          "default": 0.3
+        },
+        "note_tolerance_cents": {
+          "type": "number",
+          "default": 40
+        },
+        "min_note_duration": {
+          "type": "number",
+          "default": 0.2
+        }
       }
     }
-  },
-  "required": [
-    "beats",
-    "phrases",
-    "refPitchHz"
-  ]
+  }
 }
+

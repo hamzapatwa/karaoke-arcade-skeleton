@@ -1,8 +1,8 @@
 #!/bin/bash
-# Karaoke Arcade Startup Script
+# Karaoke Arcade v2.0 Startup Script
 
-echo "🎤 Starting Karaoke Arcade..."
-echo "================================"
+echo "🎤 Starting Karaoke Arcade v2.0..."
+echo "===================================="
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
@@ -14,6 +14,14 @@ fi
 if ! command -v python3 &> /dev/null; then
     echo "❌ Python 3 is not installed. Please install Python 3.10+ first."
     exit 1
+fi
+
+# Check macOS version (required for MPS)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    MACOS_VERSION=$(sw_vers -productVersion | cut -d'.' -f1)
+    if [ "$MACOS_VERSION" -lt 12 ]; then
+        echo "⚠️  macOS version $MACOS_VERSION detected. macOS 12.3+ required for MPS acceleration."
+    fi
 fi
 
 # Check Node.js version
@@ -67,10 +75,17 @@ echo "📦 Activating virtual environment..."
 source .venv/bin/activate
 
 echo "📦 Installing Python dependencies..."
-pip install -r requirements.txt
+pip install -q -r requirements.txt
 if [ $? -ne 0 ]; then
     echo "❌ Failed to install Python dependencies"
     exit 1
+fi
+
+# Verify MPS availability
+echo "🍎 Checking Apple Silicon (MPS) availability..."
+python separate.py --check-mps
+if [ $? -ne 0 ]; then
+    echo "⚠️  MPS not available. Preprocessing will use CPU (slower)."
 fi
 
 echo "✅ Python environment setup complete"
@@ -89,56 +104,60 @@ if [ ! -d "node_modules" ]; then
     fi
 fi
 
+# Build frontend for production
+echo "🔨 Building frontend..."
+npm run build
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to build frontend"
+    exit 1
+fi
+
 echo "✅ Frontend setup complete"
 echo ""
 
-# Run tests
-echo "🧪 Running test suite..."
+# Create necessary directories
+echo "📁 Creating directories..."
 cd ..
-python3 test_suite.py
-if [ $? -ne 0 ]; then
-    echo "⚠️  Some tests failed, but continuing..."
-fi
+mkdir -p songs
+mkdir -p sessions
+mkdir -p backend/uploads
+mkdir -p backend/references
 
 echo ""
-echo "🚀 Starting servers..."
+echo "🚀 Starting server..."
 echo ""
 
-# Start backend in background
-echo "🔧 Starting backend server on port 8080..."
+# Start backend (serves built frontend)
+echo "🔧 Starting Karaoke Arcade v2.0 on port 8080..."
 cd backend
 node server.js &
-BACKEND_PID=$!
+SERVER_PID=$!
 
-# Wait a moment for backend to start
+# Wait a moment for server to start
 sleep 3
 
-# Start frontend
-echo "⚛️  Starting frontend dev server on port 3000..."
-cd ../frontend
-npm run dev &
-FRONTEND_PID=$!
-
 echo ""
-echo "🎉 Karaoke Arcade is starting up!"
+echo "🎉 Karaoke Arcade v2.0 is running!"
 echo ""
-echo "📱 Frontend: http://localhost:3000"
-echo "🔧 Backend:  http://localhost:8080"
+echo "🌐 Open in browser: http://localhost:8080"
 echo ""
-echo "Press Ctrl+C to stop all servers"
+echo "📖 Documentation:"
+echo "   - Quick Start: ../QUICKSTART.md"
+echo "   - Architecture: ../ARCHITECTURE.md"
+echo ""
+echo "Press Ctrl+C to stop the server"
 
 # Function to cleanup on exit
 cleanup() {
     echo ""
-    echo "🛑 Stopping servers..."
-    kill $BACKEND_PID 2>/dev/null
-    kill $FRONTEND_PID 2>/dev/null
-    echo "✅ Servers stopped"
+    echo "🛑 Stopping server..."
+    kill $SERVER_PID 2>/dev/null
+    echo "✅ Server stopped"
     exit 0
 }
 
 # Set up signal handlers
 trap cleanup SIGINT SIGTERM
 
-# Wait for processes
+# Wait for process
 wait

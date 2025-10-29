@@ -90,7 +90,6 @@ export default function Leaderboard({ apiBase, onBack, onNewSession }) {
                     <span>P: {Math.round(entry.pitch_score)}</span>
                     <span>R: {Math.round(entry.rhythm_score)}</span>
                     <span>E: {Math.round(entry.energy_score)}</span>
-                    <span>M: {Math.round(entry.motion_score)}</span>
                   </div>
                 </div>
 

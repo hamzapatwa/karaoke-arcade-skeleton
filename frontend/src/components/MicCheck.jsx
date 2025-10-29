@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, wsUrl }) {
+export default function MicCheck({ onComplete }) {
   const [micPermission, setMicPermission] = useState(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [isListening, setIsListening] = useState(false);
-  const [webcamPermission, setWebcamPermission] = useState(null);
-  const [webcamStream, setWebcamStream] = useState(null);
+  // Webcam removed in voice-only refactor
 
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -15,17 +14,10 @@ export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, ws
 
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (webcamStream) {
-        webcamStream.getTracks().forEach(track => track.stop());
-      }
-      if (microphoneRef.current) {
-        microphoneRef.current.getTracks().forEach(track => track.stop());
-      }
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (microphoneRef.current) microphoneRef.current.getTracks().forEach(track => track.stop());
     };
-  }, [webcamStream]);
+  }, []);
 
   const requestMicPermission = async () => {
     try {
@@ -50,6 +42,10 @@ export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, ws
     try {
       console.log('Setting up audio analysis with stream:', stream);
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      // Ensure context is running (Chrome/Safari may start suspended)
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume().catch(() => {});
+      }
       analyserRef.current = audioContextRef.current.createAnalyser();
 
       const source = audioContextRef.current.createMediaStreamSource(stream);
@@ -71,32 +67,45 @@ export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, ws
   };
 
   const startAudioLevelMonitoring = () => {
-    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    const freqArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    const timeArray = new Uint8Array(analyserRef.current.fftSize);
 
     const updateLevel = () => {
       if (analyserRef.current) {
-        analyserRef.current.getByteFrequencyData(dataArray);
+        // Use both frequency and time-domain for more robust detection
+        analyserRef.current.getByteFrequencyData(freqArray);
+        analyserRef.current.getByteTimeDomainData(timeArray);
 
-        // Calculate RMS level with better sensitivity
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i] * dataArray[i];
+        // Frequency-domain RMS
+        let sumFreq = 0;
+        for (let i = 0; i < freqArray.length; i++) {
+          sumFreq += freqArray[i] * freqArray[i];
         }
-        const rms = Math.sqrt(sum / dataArray.length);
+        const rmsFreq = Math.sqrt(sumFreq / Math.max(1, freqArray.length));
 
-        // More sensitive normalization - scale by 64 instead of 128
-        const normalizedLevel = Math.min(rms / 64, 1);
+        // Time-domain RMS around 128 midpoint (8-bit PCM)
+        let sumTime = 0;
+        for (let i = 0; i < timeArray.length; i++) {
+          const centered = timeArray[i] - 128;
+          sumTime += centered * centered;
+        }
+        const rmsTime = Math.sqrt(sumTime / Math.max(1, timeArray.length));
 
-        // Add some minimum threshold to show activity
-        const displayLevel = Math.max(normalizedLevel, 0.05);
+        // Combine and increase sensitivity
+        const rms = Math.max(rmsFreq / 2, rmsTime);
+        const normalizedLevel = Math.min(rms / 32, 1);
+
+        // Lower floor so it moves off 5% even with quieter mics
+        const displayLevel = Math.max(normalizedLevel, 0.02);
 
         // Debug logging (remove in production)
         if (Math.random() < 0.01) { // Log 1% of the time to avoid spam
           console.log('Audio level debug:', {
-            rawData: Array.from(dataArray).slice(0, 10),
-            rms: rms,
-            normalizedLevel: normalizedLevel,
-            displayLevel: displayLevel
+            rmsFreq,
+            rmsTime,
+            rms,
+            normalizedLevel,
+            displayLevel
           });
         }
 
@@ -108,51 +117,7 @@ export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, ws
     updateLevel();
   };
 
-  const requestWebcamPermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30 }
-        }
-      });
-
-      console.log('Webcam stream obtained:', stream);
-      setWebcamStream(stream);
-      setWebcamPermission(true);
-
-      if (webcamRef.current) {
-        webcamRef.current.srcObject = stream;
-        console.log('Video element srcObject set');
-
-        // Ensure the video plays
-        webcamRef.current.onloadedmetadata = () => {
-          console.log('Video metadata loaded');
-          webcamRef.current.play().catch(e => console.error('Video play failed:', e));
-        };
-      }
-    } catch (error) {
-      console.error('Webcam access denied:', error);
-      setWebcamPermission(false);
-    }
-  };
-
-  const toggleMotionTracking = () => {
-    if (motionEnabled) {
-      // Disable motion tracking
-      if (webcamStream) {
-        webcamStream.getTracks().forEach(track => track.stop());
-        setWebcamStream(null);
-        setWebcamPermission(null);
-      }
-      onMotionToggle(false);
-    } else {
-      // Enable motion tracking
-      requestWebcamPermission();
-      onMotionToggle(true);
-    }
-  };
+  // Motion/webcam removed
 
   const startListening = () => {
     setIsListening(true);
@@ -254,43 +219,7 @@ export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, ws
           )}
         </div>
 
-        {/* Webcam Section */}
-        <div className="webcam-section">
-          <h3>Motion Tracking (Optional)</h3>
-
-          <div className="motion-toggle">
-            <button
-              className={`retro-button ${motionEnabled ? 'active' : ''}`}
-              onClick={toggleMotionTracking}
-            >
-              {motionEnabled ? '📹 DISABLE MOTION' : '📹 ENABLE MOTION'}
-            </button>
-
-            {motionEnabled && webcamPermission === true && (
-              <div className="webcam-preview">
-                <video
-                  ref={webcamRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="webcam-feed"
-                  style={{ width: '100%', maxWidth: '320px', height: 'auto' }}
-                />
-                <div className="motion-indicator">
-                  <span className="pulse">📹</span>
-                  <span>Motion tracking active</span>
-                </div>
-              </div>
-            )}
-
-            {motionEnabled && webcamPermission === false && (
-              <div className="permission-denied">
-                <p>❌ Webcam access denied</p>
-                <p>Motion tracking disabled</p>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Motion/webcam removed */}
 
         {/* Instructions */}
         <div className="instructions">
@@ -309,11 +238,11 @@ export default function MicCheck({ onComplete, onMotionToggle, motionEnabled, ws
             <button
               className="retro-button large proceed"
               onClick={proceedToLive}
-              disabled={audioLevel < 0.1}
+              disabled={audioLevel < 0.02}
             >
               🚀 START PERFORMANCE
             </button>
-            {audioLevel < 0.1 && (
+            {audioLevel < 0.02 && (
               <p className="warning">⚠️ Please test your microphone first</p>
             )}
           </div>

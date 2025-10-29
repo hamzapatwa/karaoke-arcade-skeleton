@@ -8,4 +8,22 @@ backend/references/
 backend/sessions/
 backend/leaderboard/
 backend/karaoke.db
+demo_tracks/
+songs/
+frontend/demo_tracks/
+frontend/songs/
+frontend/sessions/
+frontend/leaderboard/
+frontend/karaoke.db
 
+# System files
+.DS_Store
+**/.DS_Store
+
+# Python cache
+python/__pycache__
+*.pyc
+*.pyo
+
+
+.vscode/

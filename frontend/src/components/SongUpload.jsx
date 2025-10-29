@@ -1,31 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 
 export default function SongUpload({ onSongUploaded, apiBase }) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = useRef(null);
 
-  const handleFileSelect = async (file) => {
-    if (!file) return;
-
-    // Validate file type
-    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/x-wav'];
-    if (!allowedTypes.includes(file.type)) {
-      alert('Please select an MP3 or WAV file.');
+  const handleFileUpload = async (file) => {
+    if (!file.type.startsWith('audio/')) {
+      alert('Please select an audio file (MP3 or WAV)');
       return;
     }
 
-    // Validate file size (50MB limit)
-    if (file.size > 50 * 1024 * 1024) {
-      alert('File too large. Please select a file under 50MB.');
-      return;
-    }
-
-    await uploadFile(file);
-  };
-
-  const uploadFile = async (file) => {
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -35,127 +19,120 @@ export default function SongUpload({ onSongUploaded, apiBase }) {
 
       const response = await fetch(`${apiBase}/upload`, {
         method: 'POST',
-        body: formData,
-        onUploadProgress: (progressEvent) => {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(progress);
-        }
+        body: formData
       });
 
-      if (!response.ok) {
-        throw new Error('Upload failed');
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      const result = await response.json();
-      onSongUploaded(result.track_id, result.filename);
+      setUploadProgress(50);
+
+      // Start analysis
+      const analyzeResponse = await fetch(`${apiBase}/analyze/${result.track_id}`, {
+        method: 'POST'
+      });
+
+      const analyzeResult = await analyzeResponse.json();
+
+      if (analyzeResult.error) {
+        throw new Error(analyzeResult.error);
+      }
+
+      setUploadProgress(75);
+
+      if (analyzeResult.status === 'ready') {
+        setUploadProgress(100);
+        onSongUploaded(result.track_id, result.filename);
+      } else if (analyzeResult.job_id) {
+        // Poll for completion
+        await pollAnalysisStatus(analyzeResult.job_id, result.track_id, result.filename);
+      }
 
     } catch (error) {
-      console.error('Upload error:', error);
-      alert('Upload failed. Please try again.');
+      console.error('Upload failed:', error);
+      alert(`Upload failed: ${error.message}`);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
     }
   };
 
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
+  const pollAnalysisStatus = async (jobId, trackId, filename) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${apiBase}/analyze/status/${jobId}`);
+        const status = await response.json();
+
+        if (status.status === 'completed') {
+          clearInterval(pollInterval);
+          setUploadProgress(100);
+          onSongUploaded(trackId, filename);
+        } else if (status.status === 'error') {
+          clearInterval(pollInterval);
+          throw new Error('Analysis failed');
+        }
+      } catch (error) {
+        clearInterval(pollInterval);
+        console.error('Status check failed:', error);
+      }
+    }, 2000);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleFileUpload(file);
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileUpload(file);
     }
   };
 
-  const handleFileInputChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      handleFileSelect(e.target.files[0]);
-    }
+  const handleDragOver = (e) => {
+    e.preventDefault();
   };
 
   return (
-    <div className="upload-container">
-      <div className="upload-header">
-        <h2 className="neon-text">🎵 DROP YOUR SONG 🎵</h2>
-        <p className="upload-subtitle">
-          Upload any MP3 or WAV file and we'll analyze it for karaoke scoring!
-        </p>
-      </div>
+    <div className="song-upload">
+      <h3>Upload New Song</h3>
 
-      <div
-        className={`upload-zone ${dragActive ? 'drag-active' : ''} ${isUploading ? 'uploading' : ''}`}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/mpeg,audio/wav,audio/mp3,audio/x-wav"
-          onChange={handleFileInputChange}
-          style={{ display: 'none' }}
-        />
-
-        {isUploading ? (
-          <div className="upload-progress">
-            <div className="progress-spinner">
-              <div className="spinner"></div>
-            </div>
-            <h3>ANALYZING...</h3>
-            <p>Extracting beats, pitch, and musical features</p>
-            <div className="progress-bar">
-              <div
-                className="progress-fill"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
-            <p className="progress-text">{uploadProgress}%</p>
+      {isUploading ? (
+        <div className="upload-progress">
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{ width: `${uploadProgress}%` }}
+            ></div>
           </div>
-        ) : (
-          <div className="upload-content">
-            <div className="upload-icon">🎤</div>
-            <h3>DRAG & DROP</h3>
-            <p>or click to browse</p>
-            <div className="file-types">
-              <span className="file-type">MP3</span>
-              <span className="file-type">WAV</span>
-            </div>
-            <p className="file-limit">Max 50MB</p>
-          </div>
-        )}
-      </div>
-
-      <div className="upload-features">
-        <div className="feature">
-          <span className="feature-icon">🎯</span>
-          <span>Auto Beat Detection</span>
+          <p>Processing... {uploadProgress}%</p>
         </div>
-        <div className="feature">
-          <span className="feature-icon">🎼</span>
-          <span>Pitch Analysis</span>
+      ) : (
+        <div
+          className="upload-area"
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          <p>Drop audio file here or click to browse</p>
+          <input
+            type="file"
+            accept="audio/mpeg, audio/wav"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+            id="file-input"
+          />
+          <label htmlFor="file-input" className="retro-button">
+            Choose File
+          </label>
         </div>
-        <div className="feature">
-          <span className="feature-icon">🎵</span>
-          <span>Key Detection</span>
-        </div>
-        <div className="feature">
-          <span className="feature-icon">📊</span>
-          <span>Real-time Scoring</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,170 +1,87 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './styles/retro.css';
+import SongLibrary from './components/SongLibrary';
+import VideoKaraokePlayer from './components/VideoKaraokePlayer';
 import LiveHUD from './components/LiveHUD';
-import SongUpload from './components/SongUpload';
 import MicCheck from './components/MicCheck';
 import ResultsScreen from './components/ResultsScreen';
 import Leaderboard from './components/Leaderboard';
-import MotionTracker from './components/MotionTracker';
 
 const API_BASE = 'http://localhost:8080';
-const WS_URL = 'ws://localhost:8080/room';
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('upload'); // upload, mic-check, live, results
-  const [trackId, setTrackId] = useState(null);
-  const [referenceId, setReferenceId] = useState(null);
+  const [currentScreen, setCurrentScreen] = useState('library'); // library, mic-check, karaoke, results
+  const [selectedSong, setSelectedSong] = useState(null);
   const [sessionId, setSessionId] = useState(null);
-  const [referenceData, setReferenceData] = useState(null);
-  const [roomId, setRoomId] = useState('main');
-  const [motionEnabled, setMotionEnabled] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  const [videoTime, setVideoTime] = useState(0);
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const [sessionResults, setSessionResults] = useState(null);
 
-  // WebSocket connection
-  const wsRef = useRef(null);
-  const [wsConnected, setWsConnected] = useState(false);
+  // WebSocket removed in voice-only refactor
 
-  useEffect(() => {
-    // Generate room ID
-    const room = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    setRoomId(room);
-  }, []);
-
-  const connectWebSocket = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    const ws = new WebSocket(`${WS_URL}/${roomId}`);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setWsConnected(true);
-      ws.send(JSON.stringify({ type: 'join', roomId }));
-    };
-
-    ws.onclose = () => {
-      setWsConnected(false);
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    return ws;
-  };
-
-  const handleSongUploaded = async (trackId, filename) => {
-    setTrackId(trackId);
-
-    // Start analysis
-    try {
-      const response = await fetch(`${API_BASE}/analyze/${trackId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      const result = await response.json();
-
-      if (result.status === 'ready') {
-        setReferenceId(result.reference_id);
-        await loadReferenceData(result.reference_id);
-        setCurrentScreen('mic-check');
-      } else if (result.job_id) {
-        // Poll for completion
-        await pollAnalysisStatus(result.job_id);
-      }
-    } catch (error) {
-      console.error('Analysis failed:', error);
-      alert('Analysis failed. Please try again.');
-    }
-  };
-
-  const pollAnalysisStatus = async (jobId) => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${API_BASE}/analyze/status/${jobId}`);
-        const status = await response.json();
-
-        if (status.status === 'completed') {
-          clearInterval(pollInterval);
-          setReferenceId(status.referenceId);
-          await loadReferenceData(status.referenceId);
-          setCurrentScreen('mic-check');
-        } else if (status.status === 'error') {
-          clearInterval(pollInterval);
-          alert('Analysis failed. Please try again.');
-        }
-      } catch (error) {
-        console.error('Status check failed:', error);
-        clearInterval(pollInterval);
-      }
-    }, 2000);
-  };
-
-  const loadReferenceData = async (referenceId) => {
-    try {
-      const response = await fetch(`${API_BASE}/reference/${referenceId}`);
-      const data = await response.json();
-      setReferenceData(data);
-    } catch (error) {
-      console.error('Failed to load reference data:', error);
-    }
+  const handleSongSelect = (songData) => {
+    setSelectedSong(songData);
+    setCurrentScreen('mic-check');
   };
 
   const handleMicCheckComplete = () => {
-    setCurrentScreen('live');
-    connectWebSocket();
+    setCurrentScreen('karaoke');
   };
 
   const handleSessionComplete = async (results) => {
     try {
-      // Save results to backend
-      await fetch(`${API_BASE}/session/finish/${sessionId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(results)
-      });
-
-      // Submit to leaderboard if player name provided
-      if (playerName) {
-        await fetch(`${API_BASE}/leaderboard/submit`, {
+      // Save results to backend if sessionId exists
+      if (sessionId) {
+        await fetch(`${API_BASE}/sessions/${sessionId}/finish`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            player_name: playerName,
-            scores: results.totals,
-            badges: results.badges
-          })
-        });
+          body: JSON.stringify(results)
+        }).catch(err => console.warn('Failed to save results to backend:', err));
+
+        // Submit to leaderboard if player name provided
+        if (playerName) {
+          await fetch(`${API_BASE}/leaderboard/submit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: sessionId,
+              player_name: playerName,
+              scores: results.totals,
+              badges: results.badges
+            })
+          }).catch(err => console.warn('Failed to submit to leaderboard:', err));
+        }
+      } else {
+        console.warn('No session ID, results not saved to backend');
       }
 
+      // Store results for display
+      setSessionResults(results);
       setCurrentScreen('results');
     } catch (error) {
-      console.error('Failed to save results:', error);
+      console.error('Error in handleSessionComplete:', error);
+      setSessionResults(results);
       setCurrentScreen('results');
     }
   };
 
   const startNewSession = () => {
-    setCurrentScreen('upload');
-    setTrackId(null);
-    setReferenceId(null);
+    setCurrentScreen('library');
+    setSelectedSong(null);
     setSessionId(null);
-    setReferenceData(null);
     setPlayerName('');
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    setIsSessionActive(false);
+    setSessionResults(null);
+    // No WebSocket to close
   };
 
   const renderCurrentScreen = () => {
     switch (currentScreen) {
-      case 'upload':
+      case 'library':
         return (
-          <SongUpload
-            onSongUploaded={handleSongUploaded}
+          <SongLibrary
+            onSongSelect={handleSongSelect}
             apiBase={API_BASE}
           />
         );
@@ -173,38 +90,49 @@ function App() {
         return (
           <MicCheck
             onComplete={handleMicCheckComplete}
-            onMotionToggle={setMotionEnabled}
-            motionEnabled={motionEnabled}
-            wsUrl={`${WS_URL}/${roomId}`}
+            wsUrl={`ws://localhost:8080/session/${sessionId}`}
           />
         );
 
-      case 'live':
+      case 'karaoke':
         return (
-          <div className="live-container">
-            <LiveHUD
-              wsUrl={`${WS_URL}/${roomId}`}
-              referenceData={referenceData}
-              motionEnabled={motionEnabled}
+          <div className="karaoke-stage">
+            <VideoKaraokePlayer
+              songData={selectedSong}
+              apiBase={API_BASE}
               onSessionComplete={handleSessionComplete}
               onStartSession={async () => {
-                const response = await fetch(`${API_BASE}/session/start`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    track_id: trackId,
-                    reference_id: referenceId
-                  })
-                });
-                const result = await response.json();
-                setSessionId(result.session_id);
+                try {
+                  const response = await fetch(`${API_BASE}/sessions/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      song_id: selectedSong.id
+                    })
+                  });
+                  if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Failed to start session:', errorData);
+                    throw new Error(errorData.error || 'Failed to start session');
+                  }
+                  const result = await response.json();
+                  setSessionId(result.session_id);
+                } catch (error) {
+                  console.error('Error starting session:', error);
+                  alert(`Failed to start session: ${error.message}`);
+                  setIsSessionActive(false);
+                }
               }}
+              onTimeUpdate={(t) => setVideoTime(t)}
+              isSessionActive={isSessionActive}
+              onSessionToggle={(active) => setIsSessionActive(active)}
             />
-            {motionEnabled && (
-              <MotionTracker
-                wsUrl={`${WS_URL}/${roomId}`}
-              />
-            )}
+            <LiveHUD
+              referenceData={selectedSong?.reference_data}
+              externalTime={videoTime}
+              isSessionActive={isSessionActive}
+              onSessionComplete={handleSessionComplete}
+            />
           </div>
         );
 
@@ -212,6 +140,7 @@ function App() {
         return (
           <ResultsScreen
             sessionId={sessionId}
+            results={sessionResults}
             apiBase={API_BASE}
             onNewSession={startNewSession}
             playerName={playerName}
@@ -229,10 +158,7 @@ function App() {
       <header className="app-header">
         <h1 className="neon-title">🎤 KARAOKE ARCADE 🎤</h1>
         <div className="status-indicators">
-          <span className={`status ${wsConnected ? 'connected' : 'disconnected'}`}>
-            {wsConnected ? '🟢 LIVE' : '🔴 OFFLINE'}
-          </span>
-          {motionEnabled && <span className="motion-indicator">📹 MOTION</span>}
+          {/* LIVE/OFFLINE indicator removed */}
         </div>
       </header>
 
@@ -245,9 +171,9 @@ function App() {
           <button
             className="retro-button"
             onClick={startNewSession}
-            disabled={currentScreen === 'upload'}
+            disabled={currentScreen === 'library'}
           >
-            🎵 NEW SONG
+            🎵 SONG LIBRARY
           </button>
           <button
             className="retro-button"

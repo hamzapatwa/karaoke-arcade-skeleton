@@ -1,0 +1,339 @@
+/**
+ * Video Karaoke Player Styles
+ * Retro arcade aesthetic with modern video playback
+ */
+
+.video-karaoke-player {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
+  border: 3px solid #0ff;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+}
+
+/* Video Container */
+.video-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 2px solid #f0f;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.karaoke-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Video Overlay Controls */
+.video-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.video-container:hover .video-overlay {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.play-pause-overlay {
+  width: 80px;
+  height: 80px;
+  background: rgba(0, 255, 255, 0.2);
+  border: 3px solid #0ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.play-pause-overlay:hover {
+  background: rgba(0, 255, 255, 0.4);
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+}
+
+/* Playback Controls */
+.playback-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.progress-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.time-display {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: #0ff;
+  min-width: 60px;
+  text-align: center;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #333;
+  border: 2px solid #0ff;
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0ff 0%, #f0f 100%);
+  transition: width 0.1s linear;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+}
+
+.progress-bar:hover {
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+}
+
+/* Control Buttons */
+.control-buttons {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.control-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #0ff;
+  border: 2px solid #0ff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0ff 0%, #f0f 100%);
+  color: #000;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+  transform: translateY(-2px);
+}
+
+.control-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.control-btn.active {
+  background: linear-gradient(135deg, #f0f 0%, #ff0 100%);
+  border-color: #f0f;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(255, 0, 255, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 0, 255, 0.9);
+  }
+}
+
+/* Volume Control */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.volume-icon {
+  font-size: 20px;
+}
+
+.volume-slider {
+  width: 100px;
+  height: 6px;
+  background: #333;
+  border: 1px solid #0ff;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #0ff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #0ff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+}
+
+/* Song Info */
+.song-info {
+  text-align: center;
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #0ff;
+  border-radius: 6px;
+}
+
+.song-info h3 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 16px;
+  color: #f0f;
+  margin: 0 0 10px 0;
+  text-shadow: 0 0 10px rgba(255, 0, 255, 0.8);
+}
+
+.song-metadata {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.metadata-item {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #0ff;
+  padding: 5px 10px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #0ff;
+  border-radius: 4px;
+}
+
+/* No Song State */
+.no-song {
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.no-song p {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  color: #666;
+}
+
+/* Live HUD Styles */
+.live-hud {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 20px auto;
+  background: #000;
+  border: 3px solid #0ff;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+}
+
+.hud-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid #f0f;
+  border-radius: 5px;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+.key-shift-indicator {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: #ff0;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 10px 15px;
+  border: 2px solid #ff0;
+  border-radius: 6px;
+  box-shadow: 0 0 15px rgba(255, 255, 0, 0.6);
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Karaoke Stage Layout */
+.karaoke-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
+  min-height: 100vh;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .video-karaoke-player {
+    padding: 10px;
+  }
+
+  .control-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .control-btn {
+    width: 100%;
+  }
+
+  .volume-control {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .song-info h3 {
+    font-size: 12px;
+  }
+
+  .metadata-item {
+    font-size: 8px;
+  }
+}
+

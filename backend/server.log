@@ -1,0 +1,55 @@
+🎤 Karaoke Arcade Server v2 running on port 8080
+   - Upload videos: POST /songs/upload
+   - Check status: GET /songs/:id/status
+   - Start session: POST /sessions/start
+   - Refine results: POST /sessions/:id/refine
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: 4e42df91-7469-41fb-8a5e-ed78dfeeaa75
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: c675ad32-7e69-4bbc-8649-cdcbaf94f6a2
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: e39508b4-7b50-4692-a88c-e8fe593bb76c
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: fa466ec7-da9e-4b02-83e7-5429f2ffb591
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: 0e585c47-6b79-4927-8b06-4bedc6e9a862
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: 7bd0b3c0-a269-462c-bf4a-aea05f8cb44e
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: ead227c2-1712-4c99-b524-aef51bbd2f66
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: 7ca6d3e6-fcbc-4138-b293-d48364088f52
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
+Starting session for song_id: 01e19470-2025-4a0a-babc-daa0bc1d4055
+Session created: 3952243f-8c2d-4c1c-8c0f-bab67a23aa41
+Skipping incomplete song demo-song-1: missing assets
+Skipping incomplete song test-song: missing assets
