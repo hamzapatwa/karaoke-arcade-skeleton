@@ -94,6 +94,13 @@ rm -rf songs/* sessions/* backend/uploads/*
 
 ## 🐛 Troubleshooting
 
+### Build Fails
+
+**Error: "Failed building wheel for essentia" or similar**
+- This is normal - some ML packages that aren't actually used have been removed
+- The build should succeed now (re-run `docker-compose build`)
+- If you see other package build errors, check if they're actually used in the code
+
 ### Container Won't Start
 
 ```bash

@@ -15,7 +15,6 @@ torchcrepe>=0.0.19
 crepe>=0.0.12
 
 # Audio features and alignment
-essentia>=2.1b5
 dtaidistance>=2.3.10  # Fast DTW implementation
 
 # Utilities
