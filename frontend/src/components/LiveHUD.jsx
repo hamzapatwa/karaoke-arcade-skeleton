@@ -2,13 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * Enhanced LiveHUD with:
- * - 65% pitch accuracy (with key-shift forgiveness)
- * - 25% rhythm accuracy
- * - 10% energy matching
+ * - 70% pitch accuracy (with key-shift forgiveness)
+ * - 30% energy matching
  * - NLMS adaptive echo cancellation
  * - Note lane visualization
  * - Cents error bar
- * - Beat LED indicators
  * - Combo tracking
  */
 
@@ -33,7 +31,6 @@ const LiveHUD = ({
   const [currentScore, setCurrentScore] = useState({
     total: 0,
     pitch: 0,
-    rhythm: 0,
     energy: 0
   });
 
@@ -41,7 +38,6 @@ const LiveHUD = ({
     frequency: 0,
     confidence: 0,
     centsError: 0,
-    onBeat: false,
     combo: 0,
     energyMatch: 0
   });
@@ -49,14 +45,12 @@ const LiveHUD = ({
   // Performance tracking
   const performanceData = useRef({
     pitchSamples: [],
-    rhythmSamples: [],
     energySamples: [],
     timestamps: [],
     combos: [],
     maxCombo: 0,
     frequencies: [],
-    energies: [],
-    onBeatFlags: []
+    energies: []
   });
 
   // Key shift detection
@@ -66,33 +60,42 @@ const LiveHUD = ({
     samples: []
   });
 
+  // Energy tracking for user-relative scoring
+  const energyTracking = useRef({
+    minEnergySeen: Infinity,
+    maxEnergySeen: 0,
+    initialized: false
+  });
+
+  // Pitch smoothing buffer for temporal smoothing (~100-200ms)
+  const pitchSmoothingState = useRef({
+    centsErrorBuffer: [],
+    maxBufferSize: 10 // ~100-200ms at 50fps
+  });
+
   // Track previous session state to detect transitions
   const prevSessionActiveRef = useRef(isSessionActive);
 
   // Scoring configuration (matches preprocessing config)
   const SCORING_CONFIG = {
-    PITCH_WEIGHT: 0.65,
-    RHYTHM_WEIGHT: 0.25,
-    ENERGY_WEIGHT: 0.10,
+    PITCH_WEIGHT: 0.70,
+    ENERGY_WEIGHT: 0.30,
 
-    // Pitch scoring - made more forgiving
-    PITCH_PERFECT_CENTS: 125,      // ±25 cents = perfect
-    PITCH_GOOD_CENTS: 250,         // ±50 cents = good
-    PITCH_ACCEPTABLE_CENTS: 500,  // ±100 cents = acceptable
+    // Pitch scoring - forgiving and musical
+    // ±50-100 cents = good neighborhood (80-95% score)
+    // Only large errors (>150-200 cents) drop below 40%
+    PITCH_PERFECT_CENTS: 50,       // ±50 cents = perfect (95-100%)
+    PITCH_GOOD_CENTS: 100,         // ±100 cents = good (80-95%)
+    PITCH_ACCEPTABLE_CENTS: 200,   // ±200 cents = acceptable (40-80%)
 
     // Key shift forgiveness
     KEY_SHIFT_MIN_SAMPLES: 10,    // Need 10 samples to detect shift
     KEY_SHIFT_TOLERANCE: 100,     // ±100 cents sustained offset
     KEY_SHIFT_MAX_OFFSET: 200,    // Max ±200 cents allowed
 
-    // Rhythm scoring - made more forgiving
-    BEAT_PERFECT_MS: 100,         // ±100ms = perfect
-    BEAT_GOOD_MS: 200,            // ±200ms = good
-    BEAT_ACCEPTABLE_MS: 400,      // ±400ms = acceptable
-
-    // Energy scoring
-    ENERGY_TOLERANCE_DB: 6,       // ±6dB tolerance
-    ENERGY_MIN_THRESHOLD: 0.01,   // Minimum energy to score
+    // Energy scoring - user-relative
+    ENERGY_MIN_THRESHOLD: 0.01,   // Minimum energy to score (below = silence = 0%)
+    ENERGY_SMOOTHING_WINDOW: 5,   // Samples for rolling max calculation
 
     // Combo
     COMBO_THRESHOLD: 0.7,         // 70% accuracy to maintain combo
@@ -238,16 +241,12 @@ const LiveHUD = ({
     // Calculate pitch score with key-shift forgiveness
     const pitchScore = calculatePitchScore(frequency, confidence, refData, currentTime);
 
-    // Calculate rhythm score
-    const rhythmScore = calculateRhythmScore(currentTime, refData);
-
     // Calculate energy score
     const energyScore = calculateEnergyScore(energy, refData);
 
     // Update combo
     const totalFrameScore = (
       pitchScore * SCORING_CONFIG.PITCH_WEIGHT +
-      rhythmScore * SCORING_CONFIG.RHYTHM_WEIGHT +
       energyScore * SCORING_CONFIG.ENERGY_WEIGHT
     );
 
@@ -255,12 +254,10 @@ const LiveHUD = ({
 
     // Store performance data
     performanceData.current.pitchSamples.push(pitchScore);
-    performanceData.current.rhythmSamples.push(rhythmScore);
     performanceData.current.energySamples.push(energyScore);
     performanceData.current.timestamps.push(currentTime);
     performanceData.current.frequencies.push(frequency);
     performanceData.current.energies.push(energy);
-    performanceData.current.onBeatFlags.push(rhythmScore > 0.8);
 
     // Update live metrics for display
     const centsError = calculateCentsError(frequency, refData.f0);
@@ -269,7 +266,6 @@ const LiveHUD = ({
       frequency,
       confidence,
       centsError,
-      onBeat: rhythmScore > 0.8,
       combo: performanceData.current.maxCombo,
       energyMatch: energyScore
     });
@@ -278,7 +274,6 @@ const LiveHUD = ({
     setCurrentScore(prev => ({
       total: smoothValue(prev.total, totalFrameScore * 100, SCORING_CONFIG.EMA_ALPHA),
       pitch: smoothValue(prev.pitch, pitchScore * 100, SCORING_CONFIG.EMA_ALPHA),
-      rhythm: smoothValue(prev.rhythm, rhythmScore * 100, SCORING_CONFIG.EMA_ALPHA),
       energy: smoothValue(prev.energy, energyScore * 100, SCORING_CONFIG.EMA_ALPHA)
     }));
 
@@ -319,7 +314,9 @@ const LiveHUD = ({
   }, [referenceData]);
 
   /**
-   * Calculate pitch score with key-shift forgiveness
+   * Calculate pitch score with key-shift forgiveness and temporal smoothing.
+   * More forgiving scoring: ±50-100 cents = high score (80-95%), only large errors (>150-200 cents) tank the score.
+   * Smoothed over ~100-200ms to reduce frame-to-frame jitter.
    */
   const calculatePitchScore = useCallback((frequency, confidence, refData, currentTime) => {
     if (frequency === 0 || refData.f0 === 0 || confidence < 0.3) {
@@ -353,59 +350,99 @@ const LiveHUD = ({
       }
     }
 
-    // Calculate score based on cents error
-    const absCentsError = Math.abs(centsError);
+    // Temporal smoothing: add to buffer and compute smoothed error
+    pitchSmoothingState.current.centsErrorBuffer.push(centsError);
+    if (pitchSmoothingState.current.centsErrorBuffer.length > pitchSmoothingState.current.maxBufferSize) {
+      pitchSmoothingState.current.centsErrorBuffer.shift();
+    }
 
+    // Use median of buffer for smoother scoring (reduces jitter)
+    const smoothedCentsError = median(pitchSmoothingState.current.centsErrorBuffer);
+    const absCentsError = Math.abs(smoothedCentsError);
+
+    // More forgiving piecewise scoring:
+    // ±50 cents = perfect (95-100%)
+    // ±100 cents = good (80-95%)
+    // ±200 cents = acceptable (40-80%)
+    // >200 cents = poor (<40%)
     if (absCentsError <= SCORING_CONFIG.PITCH_PERFECT_CENTS) {
-      return 1.0;
+      // Perfect: 95-100% (linear interpolation)
+      return 0.95 + (0.05 * (1 - absCentsError / SCORING_CONFIG.PITCH_PERFECT_CENTS));
     } else if (absCentsError <= SCORING_CONFIG.PITCH_GOOD_CENTS) {
-      return 0.9 - (absCentsError - SCORING_CONFIG.PITCH_PERFECT_CENTS) * 0.02;
+      // Good: 80-95% (linear interpolation)
+      const t = (absCentsError - SCORING_CONFIG.PITCH_PERFECT_CENTS) /
+                (SCORING_CONFIG.PITCH_GOOD_CENTS - SCORING_CONFIG.PITCH_PERFECT_CENTS);
+      return 0.95 - (0.15 * t);
     } else if (absCentsError <= SCORING_CONFIG.PITCH_ACCEPTABLE_CENTS) {
-      return 0.7 - (absCentsError - SCORING_CONFIG.PITCH_GOOD_CENTS) * 0.01;
+      // Acceptable: 40-80% (linear interpolation)
+      const t = (absCentsError - SCORING_CONFIG.PITCH_GOOD_CENTS) /
+                (SCORING_CONFIG.PITCH_ACCEPTABLE_CENTS - SCORING_CONFIG.PITCH_GOOD_CENTS);
+      return 0.80 - (0.40 * t);
     } else {
-      return Math.max(0, 0.5 - (absCentsError - SCORING_CONFIG.PITCH_ACCEPTABLE_CENTS) * 0.005);
+      // Poor: 0-40% (linear falloff)
+      const excess = absCentsError - SCORING_CONFIG.PITCH_ACCEPTABLE_CENTS;
+      return Math.max(0, 0.40 - (excess * 0.002)); // ~0.2% per cent beyond acceptable
     }
   }, []);
 
-  /**
-   * Calculate rhythm score based on beat distance
-   */
-  const calculateRhythmScore = useCallback((currentTime, refData) => {
-    const beatDistanceMs = refData.beatDistance * 1000;
-
-    // More forgiving rhythm scoring with smoother falloff
-    if (beatDistanceMs <= SCORING_CONFIG.BEAT_PERFECT_MS) {
-      return 1.0;
-    } else if (beatDistanceMs <= SCORING_CONFIG.BEAT_GOOD_MS) {
-      return 0.8;
-    } else if (beatDistanceMs <= SCORING_CONFIG.BEAT_ACCEPTABLE_MS) {
-      return 0.5;
-    } else if (beatDistanceMs <= 1000) {
-      // For distances up to 1 second, give partial credit
-      return 0.3;
-    } else {
-      // For very off-beat, minimal score
-      return 0.1;
-    }
-  }, []);
 
   /**
-   * Calculate energy score based on loudness match
+   * Calculate energy score normalized to user's session loudness range.
+   * Silence/near-silence (< threshold) → 0%.
+   * As user sings louder, score increases smoothly toward 100%.
+   * Score is relative to user's own min/max energy this session, not the reference track.
    */
   const calculateEnergyScore = useCallback((energy, refData) => {
-
-    // Convert energy to dB
-    const energyDb = 20 * Math.log10(energy + 1e-10);
-
-    // Compare to reference loudness
-    const refLoudness = refData.loudness || -30;
-    const loudnessDiff = Math.abs(energyDb - refLoudness);
-
-    if (loudnessDiff <= SCORING_CONFIG.ENERGY_TOLERANCE_DB) {
-      return 1.0;
-    } else {
-      return Math.max(0, 1.0 - (loudnessDiff - SCORING_CONFIG.ENERGY_TOLERANCE_DB) * 0.05);
+    // If energy is below threshold, treat as silence → 0%
+    if (energy < SCORING_CONFIG.ENERGY_MIN_THRESHOLD) {
+      return 0;
     }
+
+    const tracking = energyTracking.current;
+
+    // Initialize tracking on first valid energy sample
+    if (!tracking.initialized) {
+      tracking.minEnergySeen = energy;
+      tracking.maxEnergySeen = energy;
+      tracking.initialized = true;
+      // Return a small initial score to start building range
+      return 0.1;
+    }
+
+    // Update min/max (only update max upward, min downward to avoid noise)
+    if (energy > tracking.maxEnergySeen) {
+      tracking.maxEnergySeen = energy;
+    }
+    if (energy < tracking.minEnergySeen && energy >= SCORING_CONFIG.ENERGY_MIN_THRESHOLD) {
+      tracking.minEnergySeen = energy;
+    }
+
+    // Calculate normalized score [0, 1] based on session range
+    const range = tracking.maxEnergySeen - tracking.minEnergySeen;
+
+    // Safety: if range is too small, use a default mapping
+    if (range < 0.001) {
+      // Very small range - use logarithmic mapping from threshold to current max
+      const logEnergy = Math.log10(energy + 1e-10);
+      const logMin = Math.log10(SCORING_CONFIG.ENERGY_MIN_THRESHOLD + 1e-10);
+      const logMax = Math.log10(tracking.maxEnergySeen + 1e-10);
+      const logRange = logMax - logMin;
+
+      if (logRange < 0.1) {
+        // Still too small, use simple linear from threshold
+        return Math.min(1, (energy - SCORING_CONFIG.ENERGY_MIN_THRESHOLD) /
+                           (tracking.maxEnergySeen - SCORING_CONFIG.ENERGY_MIN_THRESHOLD + 0.001));
+      }
+
+      const normalized = (logEnergy - logMin) / logRange;
+      return Math.max(0, Math.min(1, normalized));
+    }
+
+    // Normal linear normalization
+    const normalized = (energy - tracking.minEnergySeen) / range;
+
+    // Clamp and return
+    return Math.max(0, Math.min(1, normalized));
   }, []);
 
   /**
@@ -468,9 +505,6 @@ const LiveHUD = ({
 
       // Draw cents error bar
       drawCentsErrorBar(ctx, width, height);
-
-      // Draw beat LEDs
-      drawBeatLEDs(ctx, width, height);
 
       // Draw combo
       drawCombo(ctx, width, height);
@@ -576,32 +610,6 @@ const LiveHUD = ({
     ctx.fillText(`${liveMetrics.centsError.toFixed(0)} ¢`, width / 2, barY + barHeight + 20);
   };
 
-  /**
-   * Draw beat LEDs
-   */
-  const drawBeatLEDs = (ctx, width, height) => {
-    const ledY = height * 0.85;
-    const ledSize = 20;
-    const ledSpacing = 30;
-    const numLEDs = 8;
-
-    for (let i = 0; i < numLEDs; i++) {
-      const x = width / 2 - (numLEDs * ledSpacing) / 2 + i * ledSpacing;
-
-      const isLit = liveMetrics.onBeat && (i % 2 === 0);
-      ctx.fillStyle = isLit ? '#0f0' : '#333';
-
-      ctx.beginPath();
-      ctx.arc(x, ledY, ledSize / 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (isLit) {
-        ctx.strokeStyle = '#0ff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-    }
-  };
 
   /**
    * Draw combo counter
@@ -628,8 +636,7 @@ const LiveHUD = ({
 
     ctx.fillText(`TOTAL: ${currentScore.total.toFixed(0)}%`, scoreX, scoreY);
     ctx.fillText(`PITCH: ${currentScore.pitch.toFixed(0)}%`, scoreX, scoreY + 30);
-    ctx.fillText(`RHYTHM: ${currentScore.rhythm.toFixed(0)}%`, scoreX, scoreY + 60);
-    ctx.fillText(`ENERGY: ${currentScore.energy.toFixed(0)}%`, scoreX, scoreY + 90);
+    ctx.fillText(`ENERGY: ${currentScore.energy.toFixed(0)}%`, scoreX, scoreY + 60);
   };
 
   /**
@@ -660,12 +667,10 @@ const LiveHUD = ({
 
     // Calculate averages
     const avgPitch = average(data.pitchSamples) * 100;
-    const avgRhythm = average(data.rhythmSamples) * 100;
     const avgEnergy = average(data.energySamples) * 100;
 
     const totalScore = (
       avgPitch * SCORING_CONFIG.PITCH_WEIGHT +
-      avgRhythm * SCORING_CONFIG.RHYTHM_WEIGHT +
       avgEnergy * SCORING_CONFIG.ENERGY_WEIGHT
     );
 
@@ -680,11 +685,6 @@ const LiveHUD = ({
       energy: data.energies[idx]
     }));
 
-    const rhythmHeatmap = data.timestamps.map((time, idx) => ({
-      time,
-      onBeat: data.onBeatFlags[idx]
-    }));
-
     // Determine badges
     const badges = [];
 
@@ -692,14 +692,6 @@ const LiveHUD = ({
       badges.push({
         name: 'Combo King',
         description: `${data.maxCombo}x combo streak!`
-      });
-    }
-
-    const rhythmAccuracy = avgRhythm;
-    if (rhythmAccuracy >= 85) {
-      badges.push({
-        name: 'On-Beat Bandit',
-        description: 'Perfect rhythm!'
       });
     }
 
@@ -734,11 +726,9 @@ const LiveHUD = ({
 
       if (phraseIndices.length > 0) {
         const phrasePitch = average(phraseIndices.map(idx => data.pitchSamples[idx])) * 100;
-        const phraseRhythm = average(phraseIndices.map(idx => data.rhythmSamples[idx])) * 100;
         const phraseEnergy = average(phraseIndices.map(idx => data.energySamples[idx])) * 100;
         const phraseTotal = (
           phrasePitch * SCORING_CONFIG.PITCH_WEIGHT +
-          phraseRhythm * SCORING_CONFIG.RHYTHM_WEIGHT +
           phraseEnergy * SCORING_CONFIG.ENERGY_WEIGHT
         );
 
@@ -747,7 +737,6 @@ const LiveHUD = ({
           start,
           end,
           pitchScore: phrasePitch,
-          rhythmScore: phraseRhythm,
           energyScore: phraseEnergy,
           totalScore: phraseTotal
         });
@@ -758,15 +747,13 @@ const LiveHUD = ({
       totals: {
         total: totalScore,
         pitch: avgPitch,
-        rhythm: avgRhythm,
         energy: avgEnergy,
         motion: 0 // Not implemented in voice-only mode
       },
       badges,
       graphs: {
         pitchTimeline,
-        energyGraph,
-        rhythmHeatmap
+        energyGraph
       },
       perPhrase,
       performance_data: data // Store raw data for debugging
@@ -805,19 +792,28 @@ const LiveHUD = ({
         console.log('🎤 Resetting performance data for new session');
         performanceData.current = {
           pitchSamples: [],
-          rhythmSamples: [],
           energySamples: [],
           timestamps: [],
           combos: [],
           maxCombo: 0,
           frequencies: [],
-          energies: [],
-          onBeatFlags: []
+          energies: []
         };
         keyShiftState.current = {
           detectedOffset: 0,
           confidence: 0,
           samples: []
+        };
+        // Reset energy tracking for new session
+        energyTracking.current = {
+          minEnergySeen: Infinity,
+          maxEnergySeen: 0,
+          initialized: false
+        };
+        // Reset pitch smoothing buffer
+        pitchSmoothingState.current = {
+          centsErrorBuffer: [],
+          maxBufferSize: 10
         };
       }
 

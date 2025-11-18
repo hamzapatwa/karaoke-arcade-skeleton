@@ -140,17 +140,6 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
               </div>
 
               <div className="score-item">
-                <span className="score-label">RHYTHM</span>
-                <div className="score-bar">
-                  <div
-                    className="score-fill rhythm"
-                    style={{ width: `${results.totals.rhythm}%` }}
-                  ></div>
-                </div>
-                <span className="score-value">{Math.round(results.totals.rhythm)}</span>
-              </div>
-
-              <div className="score-item">
                 <span className="score-label">ENERGY</span>
                 <div className="score-bar">
                   <div
@@ -172,7 +161,6 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                   <div key={index} className="badge">
                     <div className="badge-icon">
                       {badge.name === 'Combo King' && '👑'}
-                      {badge.name === 'On-Beat Bandit' && '🥁'}
                       {badge.name === 'Mic Melter' && '🔥'}
                       {badge.name === 'Smooth Operator' && '🎵'}
                     </div>
@@ -233,28 +221,6 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                 </div>
               </div>
 
-              <div className="chart-container">
-                <h3>Rhythm Heatmap</h3>
-                <div className="chart">
-                  <svg width="100%" height="200" className="rhythm-chart">
-                    {results.graphs.rhythmHeatmap.map((point, index) => {
-                      const maxTime = Math.max(...results.graphs.rhythmHeatmap.map(p => p.time || 0)) || 1;
-                      const x = ((point.time || 0) / maxTime) * 100;
-                      return (
-                        <rect
-                          key={index}
-                          x={`${x}%`}
-                          y="50%"
-                          width="1%"
-                          height="50%"
-                          fill={point.onBeat ? '#00e5ff' : '#ff3d00'}
-                          opacity="0.8"
-                        />
-                      );
-                    })}
-                  </svg>
-                </div>
-              </div>
             </div>
           )}
 
@@ -273,7 +239,6 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                     </div>
                     <div className="phrase-scores">
                       <span>Pitch: {Math.round(phrase.pitchScore)}</span>
-                      <span>Rhythm: {Math.round(phrase.rhythmScore)}</span>
                       <span>Energy: {Math.round(phrase.energyScore)}</span>
                     </div>
                     <div className="phrase-total">

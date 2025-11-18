@@ -1,12 +1,12 @@
-# 🎤 Karaoke Arcade v2.0 🎤
+# 🎤 PitchPerfectly 🎤
 
-**A local, offline karaoke web app with video playback, real-time vocal scoring, and Apple Silicon optimization.**
+**A local, offline karaoke web app with video playback and real-time vocal scoring.**
 
-Built for MacBook Pro (M3 Pro) - plays YouTube karaoke videos with professional-grade vocal analysis.
+Plays YouTube karaoke videos with professional-grade vocal analysis.
 
 ---
 
-## ✨ New in v2.0
+## ✨ Features
 
 ### 🎬 **Video Playback**
 - Play MP4/WebM karaoke videos with baked-in lyrics
@@ -14,8 +14,8 @@ Built for MacBook Pro (M3 Pro) - plays YouTube karaoke videos with professional-
 - Smooth playback with HTTP range support
 
 ### 🎵 **Advanced Audio Analysis**
-- **Demucs v4** vocal separation (MPS-accelerated)
-- **torch-crepe** pitch tracking (Apple Silicon optimized)
+- **Demucs v4** vocal separation
+- **torch-crepe** pitch tracking
 - **DTW alignment** handles tempo changes and sync drift
 - **NLMS echo cancellation** for speaker playback
 
@@ -26,8 +26,7 @@ Built for MacBook Pro (M3 Pro) - plays YouTube karaoke videos with professional-
 - **Real-time HUD** - Note lane, cents error bar, beat LEDs, combo counter
 
 ### 🚀 **Performance**
-- 4-8x faster preprocessing on Apple Silicon (MPS)
-- ~90 seconds for 3-minute song (vs 6+ minutes on CPU)
+- Fast preprocessing pipeline
 - <10ms real-time scoring latency
 - 20-30dB echo reduction for speaker mode
 
@@ -41,7 +40,6 @@ Built for MacBook Pro (M3 Pro) - plays YouTube karaoke videos with professional-
 - **🔊 Speaker Support**: Adaptive echo cancellation (NLMS) for playback bleed
 - **📊 Detailed Results**: Per-phrase accuracy, pitch timeline, timing heatmap
 - **🏆 Leaderboard**: Local high scores with badges
-- **🍎 Apple Silicon**: MPS/Metal/CoreML optimized preprocessing
 - **🎮 Retro Arcade UI**: Neon grid aesthetics with CRT effects
 
 ## 🚀 Quick Start
@@ -67,10 +65,9 @@ open http://localhost:8080
 ### 💻 Option 2: Native Installation
 
 ### Prerequisites
-- **macOS 12.3+** (for Metal Performance Shaders)
 - **Node.js 20+**
 - **Python 3.10+**
-- **ffmpeg** (`brew install ffmpeg`)
+- **ffmpeg** (`brew install ffmpeg` on macOS, or your system's package manager)
 
 ### Installation
 
@@ -88,10 +85,6 @@ cd ../python
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-# 4. Verify Apple Silicon acceleration
-python separate.py --check-mps
-# Expected: ✅ MPS is available and ready to use!
 ```
 
 ### Running the App
@@ -110,7 +103,7 @@ open http://localhost:8080
 1. Click **"UPLOAD SONG"**
 2. Select **karaoke video** (MP4/WebM with lyrics)
 3. Select **original audio** (WAV/MP3 studio version)
-4. Wait ~90 seconds for preprocessing
+4. Wait for preprocessing to complete
 5. **Sing and get scored!**
 
 📖 **Detailed guide**: See [QUICKSTART.md](QUICKSTART.md)
@@ -124,7 +117,7 @@ open http://localhost:8080
 ## 🎮 How to Use
 
 1. **Upload**: Karaoke video (with lyrics) + original studio audio
-2. **Preprocessing**: ~90s automatic analysis (vocal separation, alignment, pitch extraction)
+2. **Preprocessing**: Automatic analysis (vocal separation, alignment, pitch extraction)
 3. **Select Song**: Browse library and choose your track
 4. **Mic Check**: Test audio levels, optional motion tracking
 5. **Perform**: Video plays with real-time scoring HUD
@@ -135,7 +128,7 @@ open http://localhost:8080
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    KARAOKE ARCADE v2.0                         │
+│                    PITCH PERFECTLY                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  Frontend (Browser)                                             │
@@ -148,8 +141,8 @@ open http://localhost:8080
 │  ├─ Video streaming (HTTP range support)                       │
 │  └─ SQLite database (songs, sessions, leaderboard)             │
 │                                                                 │
-│  Python (Apple Silicon)                                         │
-│  ├─ separate.py (Demucs v4 + MPS)                             │
+│  Python                                                         │
+│  ├─ separate.py (Demucs v4)                                    │
 │  ├─ preprocess_full.py (DTW + torch-crepe + alignment)        │
 │  └─ refine_results.py (post-run phrase-local DTW)             │
 │                                                                 │
@@ -157,7 +150,6 @@ open http://localhost:8080
 ```
 
 **Key Technologies**:
-- **PyTorch MPS**: 4-8x faster on Apple Silicon
 - **Demucs v4**: State-of-the-art vocal separation
 - **torch-crepe**: High-quality pitch tracking
 - **DTW**: Robust alignment for sync drift
@@ -166,8 +158,8 @@ open http://localhost:8080
 
 ## 🎯 Scoring System
 
-### Enhanced v2.0 Scoring
-- **65% Pitch Accuracy** (upgraded!)
+### Enhanced Scoring
+- **65% Pitch Accuracy**
   - ±10 cents = Perfect (100%)
   - ±25 cents = Good (90%)
   - ±50 cents = Acceptable (70%)
@@ -257,7 +249,7 @@ karaoke-arcade-skeleton/
 │   │       └── pitch-processor-aec.js    # NLMS echo cancellation
 │   └── package.json
 ├── python/
-│   ├── separate.py            # Demucs v4 (MPS)
+│   ├── separate.py            # Demucs v4
 │   ├── preprocess_full.py     # Full pipeline
 │   ├── refine_results.py      # Post-run DTW
 │   └── requirements.txt
@@ -285,8 +277,7 @@ python preprocess_full.py \
   --song-id demo-test \
   --karaoke-video ../demo_tracks/demo_ballad.mp4 \
   --original-audio ../demo_tracks/demo_ballad_full.wav \
-  --output-dir ../songs/demo-test \
-  --device mps
+  --output-dir ../songs/demo-test
 
 # Verify outputs
 ls ../songs/demo-test/
@@ -297,13 +288,13 @@ cat ../songs/demo-test/reference.json | jq '.warp_T.quality'
 # Should be > 0.7
 ```
 
-### Performance Benchmarks (M3 Pro)
+### Performance Benchmarks
 | Task | Time |
 |------|------|
-| Vocal separation (3min) | ~45s |
+| Vocal separation (3min) | ~45-90s |
 | DTW alignment | ~5s |
 | Pitch extraction | ~8s |
-| Full preprocessing | ~90s |
+| Full preprocessing | ~90-180s |
 | Real-time scoring | <10ms |
 
 ## 🎵 Best Practices
@@ -337,10 +328,12 @@ cat ../songs/demo-test/reference.json | jq '.warp_T.quality'
 
 ### Common Issues
 
-**"MPS not available"**
+**"Preprocessing slow"**
 ```bash
-python -c "import torch; print(torch.backends.mps.is_available())"
-# If False: pip install --upgrade torch torchvision torchaudio
+# Ensure PyTorch is properly installed
+pip install --upgrade torch torchvision torchaudio
+# Check if GPU acceleration is available (optional)
+python -c "import torch; print(torch.cuda.is_available() if torch.cuda.is_available() else 'CPU mode')"
 ```
 
 **"Preprocessing failed"**
@@ -407,20 +400,17 @@ python -c "import torch; print(torch.backends.mps.is_available())"
 - [ ] VR karaoke experience
 - [ ] Song pack marketplace
 
-## 🎉 What's New in v2.0
+## 🎉 Key Features
 
-**Major Refactor** - Complete system overhaul:
+**Complete karaoke system**:
 - ✅ Video playback with frame-accurate timing
-- ✅ Apple Silicon optimization (4-8x speedup)
-- ✅ Demucs v4 vocal separation (MPS)
+- ✅ Demucs v4 vocal separation
 - ✅ DTW alignment for sync handling
 - ✅ NLMS echo cancellation (speaker mode)
 - ✅ Enhanced scoring (65/25/10)
 - ✅ Key-shift forgiveness
 - ✅ Post-run refinement
 - ✅ Comprehensive documentation
-
-**Performance**: 3-minute song preprocessed in ~90s on M3 Pro!
 
 ---
 
@@ -430,12 +420,12 @@ MIT License - see LICENSE file for details
 
 ## 🎉 Credits
 
-**v2.0 Stack**:
+**Technology Stack**:
 - **Demucs v4**: Meta Research (vocal separation)
 - **torch-crepe**: Max Morrison (pitch tracking)
 - **librosa**: AudioLab (music analysis)
 - **dtaidistance**: Wannes Meert (DTW)
-- **PyTorch**: Meta (MPS backend)
+- **PyTorch**: Meta (deep learning)
 - **React**: Meta (frontend)
 - **Express**: OpenJS Foundation (backend)
 

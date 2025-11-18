@@ -88,7 +88,6 @@ export default function Leaderboard({ apiBase, onBack, onNewSession }) {
                   </div>
                   <div className="score-breakdown">
                     <span>P: {Math.round(entry.pitch_score)}</span>
-                    <span>R: {Math.round(entry.rhythm_score)}</span>
                     <span>E: {Math.round(entry.energy_score)}</span>
                   </div>
                 </div>
@@ -99,7 +98,6 @@ export default function Leaderboard({ apiBase, onBack, onNewSession }) {
                       {entry.badges.map((badge, badgeIndex) => (
                         <span key={badgeIndex} className="badge-mini">
                           {badge.name === 'Combo King' && '👑'}
-                          {badge.name === 'On-Beat Bandit' && '🥁'}
                           {badge.name === 'Mic Melter' && '🔥'}
                           {badge.name === 'Smooth Operator' && '🎵'}
                         </span>

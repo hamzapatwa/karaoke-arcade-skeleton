@@ -898,7 +898,7 @@ app.post('/leaderboard/submit', (req, res) => {
       player_name,
       scores.total,
       scores.pitch,
-      scores.rhythm,
+      scores.rhythm || 0, // Default to 0 if not provided (rhythm scoring removed)
       scores.energy,
       JSON.stringify(badges)
     ],
