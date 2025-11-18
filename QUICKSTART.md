@@ -90,15 +90,6 @@ Open your browser to: **http://localhost:8080**
 
 ## Adding Your First Song
 
-### Option 1: Via Web UI (Recommended)
-
-1. Click "UPLOAD SONG"
-2. Fill in song name
-3. Select karaoke video (MP4/WebM with lyrics)
-4. Select original audio (WAV/MP3 studio version)
-5. Click "START PREPROCESSING"
-6. Wait ~90 seconds (progress bar shows status)
-7. Song appears in library when ready!
 
 ### Option 2: Via Command Line
 
