@@ -27,6 +27,21 @@ const VideoKaraokePlayer = ({
   const isSessionActiveRef = useRef(isSessionActive);
   const audioRef = useRef(null);
   const [vocalsEnabled, setVocalsEnabled] = useState(false);
+  const [videoOffset, setVideoOffset] = useState(0);
+  const videoOffsetRef = useRef(0);
+
+  // Update ref when videoOffset changes
+  useEffect(() => {
+    videoOffsetRef.current = videoOffset;
+    // Sync audio immediately if playing
+    if (vocalsEnabled && audioRef.current && videoRef.current) {
+      const targetTime = videoRef.current.currentTime + videoOffset;
+      if (targetTime >= 0 && targetTime < audioRef.current.duration) {
+        const wasPaused = audioRef.current.paused;
+        audioRef.current.currentTime = targetTime;
+      }
+    }
+  }, [videoOffset, vocalsEnabled]);
 
   // Update ref when isSessionActive changes
   useEffect(() => {
@@ -55,9 +70,21 @@ const VideoKaraokePlayer = ({
 
     setCurrentTime(time);
 
+    // Apply offset for scoring/logic
+    const effectiveTime = Math.max(0, time + videoOffsetRef.current);
+
     // Notify parent component (LiveHUD) of time update
     if (onTimeUpdate) {
-      onTimeUpdate(time);
+      onTimeUpdate(effectiveTime);
+    }
+
+    // Keep vocals in sync (check drift)
+    if (vocalsEnabled && audioRef.current && !audioRef.current.paused) {
+      const audioTime = audioRef.current.currentTime;
+      // If drift is > 0.1s, resync
+      if (Math.abs(audioTime - effectiveTime) > 0.1) {
+         audioRef.current.currentTime = effectiveTime;
+      }
     }
 
     // Schedule next frame update
@@ -77,8 +104,10 @@ const VideoKaraokePlayer = ({
     const video = videoRef.current;
     setCurrentTime(video.currentTime);
 
+    const effectiveTime = Math.max(0, video.currentTime + videoOffsetRef.current);
+
     if (onTimeUpdate) {
-      onTimeUpdate(video.currentTime);
+      onTimeUpdate(effectiveTime);
     }
   }, [onTimeUpdate]);
 
@@ -109,7 +138,8 @@ const VideoKaraokePlayer = ({
 
       // Sync vocals playback
       if (vocalsEnabled && audioRef.current) {
-        audioRef.current.currentTime = video.currentTime;
+        const startParams = video.currentTime + videoOffsetRef.current;
+        audioRef.current.currentTime = Math.max(0, startParams);
         audioRef.current.play().catch(() => {});
       }
     };
@@ -210,12 +240,12 @@ const VideoKaraokePlayer = ({
     setCurrentTime(time);
 
     if (onTimeUpdate) {
-      onTimeUpdate(time);
+      onTimeUpdate(Math.max(0, time + videoOffsetRef.current));
     }
 
     // Keep vocals in sync
     if (audioRef.current) {
-      audioRef.current.currentTime = time;
+      audioRef.current.currentTime = Math.max(0, time + videoOffsetRef.current);
       if (vocalsEnabled && !video.paused) {
         audioRef.current.play().catch(() => {});
       }
@@ -359,6 +389,20 @@ const VideoKaraokePlayer = ({
             />
           </div>
 
+          <div className="sync-control">
+            <span className="sync-icon" title="Video/Vocals Sync Offset">⏱️</span>
+            <span className="sync-label">{videoOffset > 0 ? '+' : ''}{videoOffset.toFixed(2)}s</span>
+            <input
+              type="range"
+              min="-3"
+              max="3"
+              step="0.05"
+              value={videoOffset}
+              onChange={(e) => setVideoOffset(parseFloat(e.target.value))}
+              className="sync-slider"
+            />
+          </div>
+
           {vocalsSrc && (
             <button
               className={`control-btn ${vocalsEnabled ? 'active' : ''}`}
@@ -366,7 +410,7 @@ const VideoKaraokePlayer = ({
                 const next = !vocalsEnabled;
                 setVocalsEnabled(next);
                 if (audioRef.current) {
-                  audioRef.current.currentTime = videoRef.current?.currentTime || 0;
+                  audioRef.current.currentTime = Math.max(0, (videoRef.current?.currentTime || 0) + videoOffsetRef.current);
                   if (next && !videoRef.current?.paused) {
                     audioRef.current.play().catch(() => {});
                   } else {
@@ -376,7 +420,7 @@ const VideoKaraokePlayer = ({
               }}
               disabled={!videoReady}
             >
-              {vocalsEnabled ? '🔇 MUTE REF VOCALS' : '🔈 PLAY REF VOCALS'}
+              {vocalsEnabled ? '🔇 MUTE REF' : '🔈 PLAY REF'}
             </button>
           )}
         </div>

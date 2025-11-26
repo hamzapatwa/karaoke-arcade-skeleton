@@ -260,12 +260,23 @@ const LiveHUD = ({
 
     updateCombo(totalFrameScore);
 
-    // Store performance data
+    // Store performance data with size limit to prevent memory bloat
+    const MAX_SAMPLES = 10000; // Limit to ~3-4 minutes at 50fps
+
     performanceData.current.pitchSamples.push(pitchScore);
     performanceData.current.energySamples.push(energyScore);
     performanceData.current.timestamps.push(currentTime);
     performanceData.current.frequencies.push(frequency);
     performanceData.current.energies.push(energy);
+
+    // Remove oldest samples if we exceed the limit (keep most recent)
+    if (performanceData.current.pitchSamples.length > MAX_SAMPLES) {
+      performanceData.current.pitchSamples.shift();
+      performanceData.current.energySamples.shift();
+      performanceData.current.timestamps.shift();
+      performanceData.current.frequencies.shift();
+      performanceData.current.energies.shift();
+    }
 
     // Update live metrics for display
     const centsError = calculateCentsError(frequency, refData.f0);
@@ -349,23 +360,24 @@ const LiveHUD = ({
     // Instead of if(frequency === 0) return floor, smoothly transition near 0
     const freqFactor = smoothSigmoid(frequency, 20, 10); // Smooth transition around 20 Hz
     const refFactor = smoothSigmoid(refData.f0, 20, 10);
-    
+
     // If either frequency is very low, smoothly approach floor
     const detectionFactor = freqFactor * refFactor;
-    
+
     // Calculate raw cents error (protected against zero)
     const safeFreq = Math.max(frequency, 0.1);
     const safeRef = Math.max(refData.f0, 0.1);
     let centsError = calculateCentsError(safeFreq, safeRef);
 
     // Detect and apply key shift forgiveness
+    // Limit array size to prevent memory growth
     keyShiftState.current.samples.push(centsError);
+    const MAX_KEY_SHIFT_SAMPLES = 20;
+    if (keyShiftState.current.samples.length > MAX_KEY_SHIFT_SAMPLES) {
+      keyShiftState.current.samples.shift();
+    }
 
     if (keyShiftState.current.samples.length > SCORING_CONFIG.KEY_SHIFT_MIN_SAMPLES) {
-      // Remove old samples (keep last 20)
-      if (keyShiftState.current.samples.length > 20) {
-        keyShiftState.current.samples.shift();
-      }
 
       // Calculate median offset
       const medianOffset = median(keyShiftState.current.samples);
@@ -393,18 +405,18 @@ const LiveHUD = ({
     // Formula: score = floor + (1 - floor) * exp(-error / decay_rate)
     const decayRate = 120; // Controls how fast score drops (larger = more forgiving)
     const errorDecay = Math.exp(-absCentsError / decayRate);
-    
+
     // Base score from pitch accuracy (exponential decay from 1.0 to floor)
-    const pitchAccuracyScore = SCORING_CONFIG.PITCH_FLOOR + 
+    const pitchAccuracyScore = SCORING_CONFIG.PITCH_FLOOR +
                               (1 - SCORING_CONFIG.PITCH_FLOOR) * errorDecay;
-    
+
     // Apply smooth confidence multiplier (continuous, not step function)
     const confMultiplier = confidenceMultiplier(confidence);
-    
+
     // Apply smooth detection factor (continuous transition for freq near 0)
-    const finalScore = pitchAccuracyScore * confMultiplier * detectionFactor + 
+    const finalScore = pitchAccuracyScore * confMultiplier * detectionFactor +
                        SCORING_CONFIG.PITCH_FLOOR * (1 - detectionFactor);
-    
+
     return finalScore;
   }, []);
 
@@ -443,24 +455,24 @@ const LiveHUD = ({
 
     // Continuous normalization on log scale
     let normalized = (logEnergy - logMin) / logRange;
-    
+
     // Smooth clamp using tanh (continuous, not hard clamp)
     // tanh smoothly maps (-inf, inf) -> (-1, 1)
     // We scale and shift to map smoothly to [floor, 1]
     normalized = Math.tanh(normalized * 2); // Smooth saturation
-    
+
     // Map from [-1, 1] to [floor, 1] smoothly
-    const score = SCORING_CONFIG.ENERGY_FLOOR + 
+    const score = SCORING_CONFIG.ENERGY_FLOOR +
                   (1 - SCORING_CONFIG.ENERGY_FLOOR) * (normalized + 1) / 2;
-    
+
     // Additional smooth boost for very quiet singing using sigmoid
     // This ensures floor is reached smoothly, not abruptly
     const quietBoost = smoothSigmoid(energy, SCORING_CONFIG.ENERGY_MIN_THRESHOLD, 0.002);
-    
+
     // Blend between floor and calculated score based on energy level
-    const finalScore = SCORING_CONFIG.ENERGY_FLOOR * (1 - quietBoost) + 
+    const finalScore = SCORING_CONFIG.ENERGY_FLOOR * (1 - quietBoost) +
                        score * quietBoost;
-    
+
     return finalScore;
   }, []);
 
@@ -513,61 +525,265 @@ const LiveHUD = ({
     const width = canvas.width;
     const height = canvas.height;
 
-    // Animation loop
-    const render = () => {
-      // Clear canvas
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, width, height);
+    let animationFrameId = null;
+    let lastRenderTime = 0;
+    const targetFPS = 60;
+    const frameInterval = 1000 / targetFPS;
 
-      // Draw note lane
-      drawNoteLane(ctx, width, height);
+    // Animation loop with FPS limiting
+    const render = (currentTime) => {
+        // Throttle to target FPS to reduce GPU load
+        if (currentTime - lastRenderTime >= frameInterval) {
+          // Clear canvas efficiently (clearRect is faster than fillRect)
+          ctx.clearRect(0, 0, width, height);
+          // Fill background
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, width, height);
 
-      // Draw cents error bar
-      drawCentsErrorBar(ctx, width, height);
+        // Draw note lane
+        drawNoteLane(ctx, width, height);
 
-      // Draw combo
-      drawCombo(ctx, width, height);
+        // Draw cents error bar
+        drawCentsErrorBar(ctx, width, height);
 
-      // Draw scores
-      drawScores(ctx, width, height);
+        // Draw combo
+        drawCombo(ctx, width, height);
 
-      requestAnimationFrame(render);
+        // Draw scores
+        drawScores(ctx, width, height);
+
+        lastRenderTime = currentTime;
+      }
+
+      animationFrameId = requestAnimationFrame(render);
     };
 
-    render();
+    animationFrameId = requestAnimationFrame(render);
 
-  }, [liveMetrics, currentScore, referenceData]);
+    // Cleanup: cancel animation frame on unmount or dependency change
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+
+  }, [liveMetrics, currentScore, referenceData, externalTime]);
 
   /**
-   * Draw note lane visualization
+   * Draw note lane visualization with piano roll style
    */
   const drawNoteLane = (ctx, width, height) => {
     const laneY = height * 0.3;
     const laneHeight = height * 0.4;
+    const laneX = 50;
+    const laneWidth = width - 100;
+    const centerX = width / 2;
 
-    // Draw lane background
+    // Draw lane background with grid
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(laneX, laneY, laneWidth, laneHeight);
+
+    // Draw grid lines for pitch reference (every octave)
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+    const minFreq = 100;
+    const maxFreq = 800;
+    for (let freq = minFreq; freq <= maxFreq; freq *= 2) {
+      const y = frequencyToY(freq, laneY, laneHeight);
+      ctx.beginPath();
+      ctx.moveTo(laneX, y);
+      ctx.lineTo(laneX + laneWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw lane border
     ctx.strokeStyle = '#0ff';
     ctx.lineWidth = 2;
-    ctx.strokeRect(50, laneY, width - 100, laneHeight);
+    ctx.strokeRect(laneX, laneY, laneWidth, laneHeight);
 
-    // Draw reference pitch line
-    if (referenceData && liveMetrics.frequency > 0) {
-      const refFreq = getReferenceDataAtTime(externalTime)?.f0 || 0;
+    if (!referenceData || !referenceData.f0_ref_on_k) return;
 
-      if (refFreq > 0) {
-        const refY = frequencyToY(refFreq, laneY, laneHeight);
-        ctx.strokeStyle = '#f0f';
+    // Get notes in the visible time window (past and future)
+    // Use binary search for better performance on large arrays
+    const lookAheadTime = 3.0; // Show 3 seconds ahead
+    const lookBackTime = 0.5;  // Show 0.5 seconds behind
+    const currentTime = externalTime;
+    const timeMin = currentTime - lookBackTime;
+    const timeMax = currentTime + lookAheadTime;
+
+    // Binary search for start index (first note >= timeMin)
+    const notes = referenceData.f0_ref_on_k;
+    let startIdx = 0;
+    let endIdx = notes.length;
+
+    // Find start index
+    while (startIdx < endIdx) {
+      const mid = Math.floor((startIdx + endIdx) / 2);
+      if (notes[mid].t < timeMin) {
+        startIdx = mid + 1;
+      } else {
+        endIdx = mid;
+      }
+    }
+
+    // Find end index (first note > timeMax)
+    endIdx = notes.length;
+    let searchStart = startIdx;
+    while (searchStart < endIdx) {
+      const mid = Math.floor((searchStart + endIdx) / 2);
+      if (notes[mid].t <= timeMax) {
+        searchStart = mid + 1;
+      } else {
+        endIdx = mid;
+      }
+    }
+
+    // Filter visible notes (only check conf and f0, time already filtered)
+    const visibleNotes = [];
+    for (let i = startIdx; i < endIdx; i++) {
+      const note = notes[i];
+      if (note.f0 > 0 && note.conf > 0.3) {
+        visibleNotes.push(note);
+      }
+    }
+
+    // Group consecutive notes with similar pitch into note blocks
+    const noteBlocks = [];
+    let currentBlock = null;
+
+    visibleNotes.forEach(note => {
+      if (!currentBlock) {
+        currentBlock = {
+          startTime: note.t,
+          endTime: note.t,
+          f0: note.f0,
+          conf: note.conf
+        };
+      } else {
+        const timeGap = note.t - currentBlock.endTime;
+        const freqDiff = Math.abs(1200 * Math.log2(note.f0 / currentBlock.f0));
+
+        // If gap is small (< 0.1s) and pitch is similar (< 50 cents), extend block
+        if (timeGap < 0.1 && freqDiff < 50) {
+          currentBlock.endTime = note.t;
+          // Update f0 to median of block
+          currentBlock.f0 = (currentBlock.f0 + note.f0) / 2;
+        } else {
+          // Save current block and start new one
+          noteBlocks.push(currentBlock);
+          currentBlock = {
+            startTime: note.t,
+            endTime: note.t,
+            f0: note.f0,
+            conf: note.conf
+          };
+        }
+      }
+    });
+    if (currentBlock) {
+      noteBlocks.push(currentBlock);
+    }
+
+    // Draw note blocks
+    noteBlocks.forEach((block) => {
+      const noteY = frequencyToY(block.f0, laneY, laneHeight);
+      const noteHeight = 8; // Height of note bar
+
+      // Calculate horizontal position (notes move right to left)
+      // Notes in the future are on the right, past notes on the left
+      const timeFromNow = block.startTime - currentTime;
+      const pixelsPerSecond = laneWidth / (lookAheadTime + lookBackTime);
+      const noteX = centerX + (timeFromNow * pixelsPerSecond);
+
+      // Note width based on duration
+      const noteDuration = block.endTime - block.startTime;
+      const noteWidth = Math.max(4, noteDuration * pixelsPerSecond);
+
+      // Check if this is the current target note (closest to current time)
+      const isCurrentNote = block.startTime <= currentTime && block.endTime >= currentTime;
+      const isNearCurrent = Math.abs(block.startTime - currentTime) < 0.2;
+
+      // Draw note block
+      if (noteX + noteWidth >= laneX && noteX <= laneX + laneWidth) {
+        // Highlight current target note
+        if (isCurrentNote) {
+          ctx.fillStyle = '#ff0'; // Bright yellow for current note
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = '#ff0';
+        } else if (isNearCurrent) {
+          ctx.fillStyle = '#f0f'; // Magenta for near current
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#f0f';
+        } else {
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; // Cyan for upcoming/past
+          ctx.shadowBlur = 0;
+        }
+
+        // Draw rounded rectangle for note (manual implementation for compatibility)
+        const x = Math.max(laneX, noteX);
+        const w = Math.min(noteWidth, laneX + laneWidth - x);
+        const y = noteY - noteHeight / 2;
+        const radius = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + noteHeight - radius);
+        ctx.quadraticCurveTo(x + w, y + noteHeight, x + w - radius, y + noteHeight);
+        ctx.lineTo(x + radius, y + noteHeight);
+        ctx.quadraticCurveTo(x, y + noteHeight, x, y + noteHeight - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Draw note border
+        ctx.strokeStyle = isCurrentNote ? '#fff' : 'rgba(0, 255, 255, 0.8)';
+        ctx.lineWidth = isCurrentNote ? 2 : 1;
+        ctx.stroke();
+      }
+    });
+
+    // Draw center line (current time indicator)
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(centerX, laneY);
+    ctx.lineTo(centerX, laneY + laneHeight);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw user's current pitch position
+    if (liveMetrics.frequency > 0 && liveMetrics.confidence > 0.2) {
+      const userY = frequencyToY(liveMetrics.frequency, laneY, laneHeight);
+
+      // Draw user pitch indicator (circle at center line)
+      ctx.fillStyle = liveMetrics.confidence > 0.5 ? '#0f0' : '#ff0';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = liveMetrics.confidence > 0.5 ? '#0f0' : '#ff0';
+      ctx.beginPath();
+      ctx.arc(centerX, userY, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Draw line connecting to target if there's a current note
+      const refData = getReferenceDataAtTime(externalTime);
+      if (refData && refData.f0 > 0) {
+        const targetY = frequencyToY(refData.f0, laneY, laneHeight);
+        ctx.strokeStyle = liveMetrics.confidence > 0.5 ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 255, 0, 0.5)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(50, refY);
-        ctx.lineTo(width - 50, refY);
+        ctx.moveTo(centerX, userY);
+        ctx.lineTo(centerX, targetY);
         ctx.stroke();
 
-        // Draw current pitch
-        const currentY = frequencyToY(liveMetrics.frequency, laneY, laneHeight);
-        ctx.fillStyle = liveMetrics.confidence > 0.5 ? '#0f0' : '#ff0';
+        // Draw target note indicator
+        ctx.fillStyle = '#f0f';
         ctx.beginPath();
-        ctx.arc(width / 2, currentY, 10, 0, Math.PI * 2);
+        ctx.arc(centerX, targetY, 6, 0, Math.PI * 2);
         ctx.fill();
       }
     }
