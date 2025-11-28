@@ -78,8 +78,8 @@ const LiveHUD = ({
 
   // Scoring configuration (matches preprocessing config)
   const SCORING_CONFIG = {
-    PITCH_WEIGHT: 0.70,
-    ENERGY_WEIGHT: 0.30,
+    PITCH_WEIGHT: 0.30,
+    ENERGY_WEIGHT: 0.70,
 
     // Pitch scoring - MORE FORGIVING
     // ±50-100 cents = good neighborhood (80-95% score)
@@ -403,7 +403,7 @@ const LiveHUD = ({
     // CONTINUOUS scoring using exponential decay (no piecewise jumps)
     // Perfect at 0 cents, smooth exponential decay as error increases
     // Formula: score = floor + (1 - floor) * exp(-error / decay_rate)
-    const decayRate = 120; // Controls how fast score drops (larger = more forgiving)
+    const decayRate = 220; // Controls how fast score drops (larger = more forgiving)
     const errorDecay = Math.exp(-absCentsError / decayRate);
 
     // Base score from pitch accuracy (exponential decay from 1.0 to floor)
@@ -756,18 +756,33 @@ const LiveHUD = ({
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // Draw legend at bottom of lane
+    const legendY = laneY + laneHeight + 15;
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+
+    // YOU indicator (green circle)
+    ctx.fillStyle = '#0f0';
+    ctx.beginPath();
+    ctx.arc(centerX - 80, legendY, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText('= YOU', centerX - 70, legendY + 4);
+
+    // TARGET indicator (magenta line)
+    ctx.strokeStyle = '#f0f';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(centerX + 30, legendY);
+    ctx.lineTo(centerX + 50, legendY);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('= TARGET', centerX + 55, legendY + 4);
+
     // Draw user's current pitch position
     if (liveMetrics.frequency > 0 && liveMetrics.confidence > 0.2) {
       const userY = frequencyToY(liveMetrics.frequency, laneY, laneHeight);
-
-      // Draw user pitch indicator (circle at center line)
-      ctx.fillStyle = liveMetrics.confidence > 0.5 ? '#0f0' : '#ff0';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = liveMetrics.confidence > 0.5 ? '#0f0' : '#ff0';
-      ctx.beginPath();
-      ctx.arc(centerX, userY, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
 
       // Draw line connecting to target if there's a current note
       const refData = getReferenceDataAtTime(externalTime);
@@ -780,12 +795,40 @@ const LiveHUD = ({
         ctx.lineTo(centerX, targetY);
         ctx.stroke();
 
-        // Draw target note indicator
+        // Draw TARGET note indicator - horizontal line with label
+        ctx.strokeStyle = '#f0f';
         ctx.fillStyle = '#f0f';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#f0f';
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(centerX, targetY, 6, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(centerX - 25, targetY);
+        ctx.lineTo(centerX + 25, targetY);
+        ctx.stroke();
+        // Target label
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('TARGET', centerX + 30, targetY + 4);
+        ctx.shadowBlur = 0;
       }
+
+      // Draw USER pitch indicator - larger filled circle with label
+      const userColor = liveMetrics.confidence > 0.5 ? '#0f0' : '#ff0';
+      ctx.fillStyle = userColor;
+      ctx.strokeStyle = '#fff';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = userColor;
+      ctx.beginPath();
+      ctx.arc(centerX, userY, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // User label
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = userColor;
+      ctx.fillText('YOU', centerX - 15, userY + 4);
+      ctx.shadowBlur = 0;
     }
   };
 
