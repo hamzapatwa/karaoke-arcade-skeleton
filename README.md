@@ -20,8 +20,8 @@ Plays YouTube karaoke videos with professional-grade vocal analysis.
 - **NLMS echo cancellation** for speaker playback
 
 ### 📊 **Enhanced Scoring**
-- **70% Pitch** - Key-shift forgiveness, octave error detection
-- **30% Rhythm** - Beat-accurate timing with ±50ms tolerance
+- **30% Pitch** - Key-shift forgiveness, octave error detection
+- **70% Energy** - Loudness consistent with vocals
 - **Real-time HUD** - Note lane, cents error bar, beat LEDs, combo counter
 
 ### 🚀 **Performance**
@@ -200,13 +200,13 @@ open http://localhost:8080
 ## 🎯 Scoring System
 
 ### Enhanced Scoring
-- **70% Pitch Accuracy**
+- **30% Pitch Accuracy**
   - ±10 cents = Perfect (100%)
   - ±25 cents = Good (90%)
   - ±50 cents = Acceptable (70%)
   - Key-shift forgiveness (±100-200 cents)
 
-- **30% Energy**
+- **70% Energy**
   - ±6dB loudness matching
   - Anti-shout caps
 
