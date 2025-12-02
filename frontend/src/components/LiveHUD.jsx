@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-/**
- * Enhanced LiveHUD with:
- * - 70% pitch accuracy (with key-shift forgiveness)
- * - 30% energy matching
- * - NLMS adaptive echo cancellation
- * - Note lane visualization
- * - Cents error bar
- * - Combo tracking
- */
-
 const LiveHUD = ({
   referenceData,
   externalTime,
@@ -98,8 +88,8 @@ const LiveHUD = ({
     ENERGY_SMOOTHING_WINDOW: 5,   // Samples for rolling max calculation
 
     // Combo
-    COMBO_THRESHOLD: 0.6,         // 60% accuracy to maintain combo (was 70%)
-    COMBO_BREAK_THRESHOLD: 0.2,   // Below 20% breaks combo (was 30%)
+    COMBO_THRESHOLD: 0.7,         // 60% accuracy to maintain combo (was 70%)
+    COMBO_BREAK_THRESHOLD: 0.3,   // Below 20% breaks combo (was 30%)
 
     // Smoothing - MORE SMOOTHING
     EMA_ALPHA: 0.2,               // Lower alpha = more smoothing (was 0.3)

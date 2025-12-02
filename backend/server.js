@@ -136,8 +136,47 @@ const upload = multer({
   }
 });
 
-// Initialize SQLite database
-const db = new sqlite3.Database('karaoke.db');
+/**
+ * Derive a reasonable song name from request body or uploaded filenames.
+ */
+function deriveSongName(req) {
+  const body = req.body || {};
+  const directName =
+    body.song_name ||
+    body.songName ||
+    body.name ||
+    body.title ||
+    body.track_name ||
+    body.trackName;
+
+  if (directName && directName.trim()) {
+    return directName.trim();
+  }
+
+  const files = Array.isArray(req.files) ? req.files : [];
+  const preferredFile =
+    files.find(f => f.fieldname === 'karaoke_video') ||
+    files.find(f => f.fieldname === 'original_audio') ||
+    files[0];
+
+  if (preferredFile?.originalname) {
+    const basename = path.basename(preferredFile.originalname, path.extname(preferredFile.originalname));
+    const normalized = basename
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (normalized) {
+      // Simple title case so filenames like "call_me_maybe" become "Call Me Maybe"
+      return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+  }
+
+  return 'Untitled Song';
+}
+
+// Initialize SQLite database (always use the backend-local file)
+const db = new sqlite3.Database(path.join(__dirname, 'karaoke.db'));
 
 // Create tables (updated schema)
 db.serialize(() => {
@@ -192,7 +231,7 @@ const preprocessingQueue = new Map();
 app.post('/songs/upload', upload.any(), async (req, res) => {
   try {
     const songId = req.songId;
-    const songName = req.body.song_name || 'Untitled Song';
+    const songName = deriveSongName(req);
     const songDir = req.songDir;
 
     // Debug logging
