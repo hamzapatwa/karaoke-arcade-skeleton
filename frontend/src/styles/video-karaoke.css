@@ -5,8 +5,6 @@
 
 .video-karaoke-player {
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
   background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
   border: 3px solid #0ff;
   border-radius: 10px;
@@ -17,8 +15,8 @@
 /* Video Container */
 .video-container {
   position: relative;
-  width: 768px;
-  height: 432px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
   background: #000;
   border: 2px solid #f0f;
   border-radius: 8px;
@@ -309,13 +307,12 @@
 .live-hud {
   position: relative;
   width: 100%;
-  max-width: 1200px;
-  margin: 20px auto;
   background: #000;
   border: 3px solid #0ff;
   border-radius: 10px;
-  padding: 20px;
+  padding: 15px;
   box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+  height: fit-content;
 }
 
 .hud-canvas {
@@ -350,25 +347,35 @@
 
 /* Karaoke Stage Layout */
 .karaoke-stage {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 500px;
   gap: 20px;
   padding: 20px;
   background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 100%);
   min-height: 100vh;
+  align-items: start;
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+  .karaoke-stage {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .live-hud canvas {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
 @media (max-width: 850px) {
   .video-karaoke-player {
     padding: 10px;
-    max-width: 100%;
   }
 
   .video-container {
     width: 100%;
-    max-width: 768px;
-    height: auto;
     aspect-ratio: 16 / 9;
   }
 

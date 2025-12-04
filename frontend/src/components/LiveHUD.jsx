@@ -117,13 +117,21 @@ const LiveHUD = ({
     try {
       console.log('Initializing audio processing with AEC...');
 
-      // Create audio context
+      // Create audio context with optimal settings
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({
         sampleRate: 48000,
-        latencyHint: 'interactive'
+        latencyHint: 'interactive',
+        // Prevent audio glitches with larger buffer
+        // Note: Some browsers ignore this, but it helps where supported
       });
 
       const audioContext = audioContextRef.current;
+
+      // Ensure audio context is running (may be suspended by browser policy)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+        console.log('Audio context resumed from suspended state');
+      }
 
       // Load AudioWorklet with AEC
       try {
@@ -170,15 +178,19 @@ const LiveHUD = ({
         };
 
         // Connect nodes
+        // NOTE: Do NOT connect worklet to destination to avoid feedback loop
+        // The worklet only processes audio and sends data via postMessage
         micSource.connect(workletNode);
-        workletNode.connect(audioContext.destination);
+        // workletNode.connect(audioContext.destination); // REMOVED: Causes feedback
 
         console.log('✅ AudioWorklet processing initialized');
       } catch (workletError) {
         console.warn('AudioWorklet failed, using basic audio monitoring:', workletError);
 
-        // Basic fallback - just connect microphone to output for monitoring
-        micSource.connect(audioContext.destination);
+        // Basic fallback - DO NOT connect mic to destination (causes feedback)
+        // Just create a dummy analyser to keep the stream active
+        const analyser = audioContext.createAnalyser();
+        micSource.connect(analyser);
 
         // Simulate some basic audio data for testing
         const testInterval = setInterval(() => {
@@ -625,10 +637,10 @@ const LiveHUD = ({
    * Draw note lane visualization with piano roll style
    */
   const drawNoteLane = (ctx, width, height) => {
-    const laneY = height * 0.3;
-    const laneHeight = height * 0.4;
-    const laneX = 50;
-    const laneWidth = width - 100;
+    const laneY = height * 0.35;
+    const laneHeight = height * 0.38;
+    const laneX = 30;
+    const laneWidth = width - 60;
     const centerX = width / 2;
 
     // Draw lane background with grid
@@ -638,9 +650,9 @@ const LiveHUD = ({
     // Draw grid lines for pitch reference (every octave)
     ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
     ctx.lineWidth = 1;
-    const minFreq = 100;
-    const maxFreq = 800;
-    for (let freq = minFreq; freq <= maxFreq; freq *= 2) {
+    // Draw octave lines: 82.4 Hz (E2), 164.8 Hz (E3), 329.6 Hz (E4), 659.2 Hz (E5)
+    const gridFreqs = [82.4, 164.8, 329.6, 659.2];
+    for (let freq of gridFreqs) {
       const y = frequencyToY(freq, laneY, laneHeight);
       ctx.beginPath();
       ctx.moveTo(laneX, y);
@@ -808,29 +820,29 @@ const LiveHUD = ({
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Draw legend at bottom of lane
-    const legendY = laneY + laneHeight + 15;
-    ctx.font = '12px monospace';
+    // Draw legend at bottom of lane (more compact)
+    const legendY = laneY + laneHeight + 12;
+    ctx.font = '9px monospace';
     ctx.textAlign = 'center';
 
     // YOU indicator (green circle)
     ctx.fillStyle = '#0f0';
     ctx.beginPath();
-    ctx.arc(centerX - 80, legendY, 6, 0, Math.PI * 2);
+    ctx.arc(centerX - 60, legendY, 5, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText('= YOU', centerX - 70, legendY + 4);
+    ctx.fillText('= YOU', centerX - 53, legendY + 3);
 
     // TARGET indicator (magenta line)
     ctx.strokeStyle = '#f0f';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(centerX + 30, legendY);
-    ctx.lineTo(centerX + 50, legendY);
+    ctx.moveTo(centerX + 20, legendY);
+    ctx.lineTo(centerX + 35, legendY);
     ctx.stroke();
     ctx.fillStyle = '#fff';
-    ctx.fillText('= TARGET', centerX + 55, legendY + 4);
+    ctx.fillText('= TARGET', centerX + 38, legendY + 3);
 
     // Draw user's current pitch position
     if (liveMetrics.frequency > 0 && liveMetrics.confidence > 0.2) {
@@ -888,10 +900,15 @@ const LiveHUD = ({
    * Convert frequency to Y position in lane
    */
   const frequencyToY = (freq, laneY, laneHeight) => {
-    const minFreq = 100; // ~G2
-    const maxFreq = 800; // ~G5
+    // Expanded range to match preprocessing (50-1000 Hz)
+    // Covers typical vocal range: E2 (~82 Hz) to C6 (~1047 Hz)
+    const minFreq = 80;   // ~E2 (low male vocals)
+    const maxFreq = 1000; // ~B5 (high female vocals)
 
-    const logFreq = Math.log2(freq);
+    // Clamp frequency to valid range to prevent notes from leaving bounds
+    const clampedFreq = Math.max(minFreq, Math.min(maxFreq, freq));
+
+    const logFreq = Math.log2(clampedFreq);
     const logMin = Math.log2(minFreq);
     const logMax = Math.log2(maxFreq);
 
@@ -903,10 +920,10 @@ const LiveHUD = ({
    * Draw cents error bar
    */
   const drawCentsErrorBar = (ctx, width, height) => {
-    const barY = height * 0.75;
-    const barWidth = 400;
-    const barHeight = 20;
-    const barX = (width - barWidth) / 2;
+    const barY = height * 0.78;
+    const barWidth = width - 60;
+    const barHeight = 18;
+    const barX = 30;
 
     // Draw bar background
     ctx.fillStyle = '#333';
@@ -935,9 +952,9 @@ const LiveHUD = ({
 
     // Draw cents value
     ctx.fillStyle = '#fff';
-    ctx.font = '14px monospace';
+    ctx.font = '11px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${liveMetrics.centsError.toFixed(0)} ¢`, width / 2, barY + barHeight + 20);
+    ctx.fillText(`${liveMetrics.centsError.toFixed(0)} ¢`, width / 2, barY + barHeight + 15);
   };
 
 
@@ -947,26 +964,113 @@ const LiveHUD = ({
   const drawCombo = (ctx, width, height) => {
     if (liveMetrics.combo >= 2) {
       ctx.fillStyle = '#ff0';
-      ctx.font = 'bold 48px monospace';
+      ctx.font = 'bold 32px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${liveMetrics.combo}x COMBO!`, width / 2, height * 0.15);
+      ctx.fillText(`${liveMetrics.combo}x`, width / 2, height * 0.12);
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText(`COMBO!`, width / 2, height * 0.16);
     }
   };
 
   /**
-   * Draw score display
+   * Draw score display with cool visual effects
    */
   const drawScores = (ctx, width, height) => {
-    ctx.fillStyle = '#0ff';
-    ctx.font = 'bold 24px monospace';
-    ctx.textAlign = 'left';
-
-    const scoreX = 20;
+    const scoreX = 15;
     const scoreY = 30;
+    const lineHeight = 55;
 
-    ctx.fillText(`TOTAL: ${currentScore.total.toFixed(0)}%`, scoreX, scoreY);
-    ctx.fillText(`PITCH: ${currentScore.pitch.toFixed(0)}%`, scoreX, scoreY + 30);
-    ctx.fillText(`ENERGY: ${currentScore.energy.toFixed(0)}%`, scoreX, scoreY + 60);
+    // Helper function to get color based on score
+    const getScoreColor = (score) => {
+      if (score >= 90) return '#0f0'; // Green for excellent
+      if (score >= 75) return '#0ff'; // Cyan for good
+      if (score >= 60) return '#ff0'; // Yellow for okay
+      return '#f80'; // Orange for needs improvement
+    };
+
+    // Helper function to draw a score with label
+    const drawScoreItem = (label, score, y, color) => {
+      // Draw label
+      ctx.font = 'bold 12px monospace';
+      ctx.fillStyle = '#888';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, scoreX, y - 8);
+
+      // Draw score with glow effect
+      const scoreColor = color || getScoreColor(score);
+
+      // Outer glow
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = scoreColor;
+
+      // Score text
+      ctx.font = 'bold 32px monospace';
+      ctx.fillStyle = scoreColor;
+      ctx.fillText(`${score.toFixed(0)}%`, scoreX, y + 20);
+
+      // Reset shadow
+      ctx.shadowBlur = 0;
+
+      // Draw progress bar
+      const barWidth = 120;
+      const barHeight = 6;
+      const barX = scoreX;
+      const barY = y + 26;
+
+      // Background bar
+      ctx.fillStyle = '#222';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      // Filled bar with gradient
+      const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
+      if (score >= 90) {
+        gradient.addColorStop(0, '#0f0');
+        gradient.addColorStop(1, '#0ff');
+      } else if (score >= 75) {
+        gradient.addColorStop(0, '#0ff');
+        gradient.addColorStop(1, '#08f');
+      } else if (score >= 60) {
+        gradient.addColorStop(0, '#ff0');
+        gradient.addColorStop(1, '#f80');
+      } else {
+        gradient.addColorStop(0, '#f80');
+        gradient.addColorStop(1, '#f00');
+      }
+
+      ctx.fillStyle = gradient;
+      const fillWidth = (score / 100) * barWidth;
+      ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+      // Bar border
+      ctx.strokeStyle = scoreColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+    };
+
+    // Draw TOTAL score (most prominent)
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText('TOTAL SCORE', scoreX, scoreY);
+
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = getScoreColor(currentScore.total);
+    ctx.font = 'bold 42px monospace';
+    ctx.fillStyle = getScoreColor(currentScore.total);
+    ctx.fillText(`${currentScore.total.toFixed(0)}%`, scoreX, scoreY + 38);
+    ctx.shadowBlur = 0;
+
+    // Divider line
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(scoreX, scoreY + 50);
+    ctx.lineTo(scoreX + 140, scoreY + 50);
+    ctx.stroke();
+
+    // Draw component scores
+    drawScoreItem('PITCH', currentScore.pitch, scoreY + 70, null);
+    drawScoreItem('ENERGY', currentScore.energy, scoreY + 125, null);
   };
 
   /**
@@ -1227,8 +1331,8 @@ const LiveHUD = ({
       <div className="live-hud">
       <canvas
         ref={canvasRef}
-        width={1200}
-        height={600}
+        width={500}
+        height={700}
         className="hud-canvas"
       />
 

@@ -124,7 +124,10 @@ const VideoKaraokePlayer = ({
       console.log('Video ready:', {
         duration: video.duration,
         videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight
+        videoHeight: video.videoHeight,
+        hasAudio: video.mozHasAudio || video.webkitAudioDecodedByteCount > 0 || video.audioTracks?.length > 0,
+        muted: video.muted,
+        volume: video.volume
       });
     };
 
@@ -212,8 +215,17 @@ const VideoKaraokePlayer = ({
 
     try {
       if (video.paused) {
+        // Ensure video is not muted
+        if (video.muted) {
+          console.warn('Video was muted, unmuting...');
+          video.muted = false;
+        }
         await video.play();
-        console.log('Video play started successfully');
+        console.log('Video play started successfully', {
+          muted: video.muted,
+          volume: video.volume,
+          currentTime: video.currentTime
+        });
       } else {
         video.pause();
         console.log('Video paused');
@@ -269,8 +281,16 @@ const VideoKaraokePlayer = ({
       // Auto-play video when session starts
       if (videoRef.current && videoRef.current.paused) {
         try {
+          // Ensure video is not muted before playing
+          if (videoRef.current.muted) {
+            console.warn('Video was muted on session start, unmuting...');
+            videoRef.current.muted = false;
+          }
           await videoRef.current.play();
-          console.log('Auto-play started for session');
+          console.log('Auto-play started for session', {
+            muted: videoRef.current.muted,
+            volume: videoRef.current.volume
+          });
         } catch (error) {
           console.error('Auto-play failed:', error);
           alert(`Auto-play failed: ${error.message}. Please click play manually.`);
@@ -323,6 +343,7 @@ const VideoKaraokePlayer = ({
           src={videoSrc}
           crossOrigin="anonymous"
           playsInline
+          preload="auto"
         >
           Your browser does not support the video tag.
         </video>
