@@ -15,6 +15,7 @@ frontend/songs/
 frontend/sessions/
 frontend/leaderboard/
 frontend/karaoke.db
+upload_demo_tracks.sh
 
 # System files
 .DS_Store
