@@ -30,23 +30,19 @@ const VideoKaraokePlayer = ({
   const [videoOffset, setVideoOffset] = useState(0);
   const videoOffsetRef = useRef(0);
 
-  // Update ref when videoOffset changes
+  // Update refs when props change
   useEffect(() => {
     videoOffsetRef.current = videoOffset;
+    isSessionActiveRef.current = isSessionActive;
+
     // Sync audio immediately if playing
-    if (vocalsEnabled && audioRef.current && videoRef.current) {
+    if (vocalsEnabled && audioRef.current && videoRef.current && videoOffset !== 0) {
       const targetTime = videoRef.current.currentTime + videoOffset;
       if (targetTime >= 0 && targetTime < audioRef.current.duration) {
-        const wasPaused = audioRef.current.paused;
         audioRef.current.currentTime = targetTime;
       }
     }
-  }, [videoOffset, vocalsEnabled]);
-
-  // Update ref when isSessionActive changes
-  useEffect(() => {
-    isSessionActiveRef.current = isSessionActive;
-  }, [isSessionActive]);
+  }, [videoOffset, isSessionActive, vocalsEnabled]);
 
   // Video source URL
   const videoSrc = songData?.karaoke_video
@@ -67,44 +63,40 @@ const VideoKaraokePlayer = ({
 
     const video = videoRef.current;
     const time = metadata ? metadata.mediaTime : video.currentTime;
+    const effectiveTime = Math.max(0, time + videoOffsetRef.current);
 
     setCurrentTime(time);
-
-    // Apply offset for scoring/logic
-    const effectiveTime = Math.max(0, time + videoOffsetRef.current);
 
     // Notify parent component (LiveHUD) of time update
     if (onTimeUpdate) {
       onTimeUpdate(effectiveTime);
     }
 
-    // Keep vocals in sync (check drift)
-    if (vocalsEnabled && audioRef.current && !audioRef.current.paused) {
+    // Keep vocals in sync (check drift every ~5 frames to reduce overhead)
+    if (vocalsEnabled && audioRef.current && !audioRef.current.paused && Math.random() < 0.2) {
       const audioTime = audioRef.current.currentTime;
-      // If drift is > 0.1s, resync
       if (Math.abs(audioTime - effectiveTime) > 0.1) {
-         audioRef.current.currentTime = effectiveTime;
+        audioRef.current.currentTime = effectiveTime;
       }
     }
 
     // Schedule next frame update
-    if (!video.paused && !video.ended) {
-      if (video.requestVideoFrameCallback) {
-        frameCallbackId.current = video.requestVideoFrameCallback(updateVideoTime);
-      }
+    if (!video.paused && !video.ended && video.requestVideoFrameCallback) {
+      frameCallbackId.current = video.requestVideoFrameCallback(updateVideoTime);
     }
-  }, [onTimeUpdate]);
+  }, [onTimeUpdate, vocalsEnabled]);
 
   /**
    * Fallback time update using timeupdate event
+   * Used when requestVideoFrameCallback is not available or as backup
    */
   const handleTimeUpdate = useCallback(() => {
     if (!videoRef.current) return;
 
     const video = videoRef.current;
-    setCurrentTime(video.currentTime);
-
     const effectiveTime = Math.max(0, video.currentTime + videoOffsetRef.current);
+
+    setCurrentTime(video.currentTime);
 
     if (onTimeUpdate) {
       onTimeUpdate(effectiveTime);
@@ -121,14 +113,7 @@ const VideoKaraokePlayer = ({
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
       setVideoReady(true);
-      console.log('Video ready:', {
-        duration: video.duration,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        hasAudio: video.mozHasAudio || video.webkitAudioDecodedByteCount > 0 || video.audioTracks?.length > 0,
-        muted: video.muted,
-        volume: video.volume
-      });
+      console.log('Video ready:', video.duration, 'seconds');
     };
 
     const handlePlay = () => {
@@ -181,7 +166,7 @@ const VideoKaraokePlayer = ({
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handleEnded);
-    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('timeupdate', handleTimeUpdate); // Fallback for time updates
 
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -221,11 +206,7 @@ const VideoKaraokePlayer = ({
           video.muted = false;
         }
         await video.play();
-        console.log('Video play started successfully', {
-          muted: video.muted,
-          volume: video.volume,
-          currentTime: video.currentTime
-        });
+        console.log('Video play started successfully');
       } else {
         video.pause();
         console.log('Video paused');
@@ -244,20 +225,20 @@ const VideoKaraokePlayer = ({
     if (!video) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
+    const percentage = (e.clientX - rect.left) / rect.width;
     const time = percentage * duration;
+    const effectiveTime = Math.max(0, time + videoOffsetRef.current);
 
     video.currentTime = time;
     setCurrentTime(time);
 
     if (onTimeUpdate) {
-      onTimeUpdate(Math.max(0, time + videoOffsetRef.current));
+      onTimeUpdate(effectiveTime);
     }
 
     // Keep vocals in sync
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, time + videoOffsetRef.current);
+      audioRef.current.currentTime = effectiveTime;
       if (vocalsEnabled && !video.paused) {
         audioRef.current.play().catch(() => {});
       }
@@ -287,10 +268,7 @@ const VideoKaraokePlayer = ({
             videoRef.current.muted = false;
           }
           await videoRef.current.play();
-          console.log('Auto-play started for session', {
-            muted: videoRef.current.muted,
-            volume: videoRef.current.volume
-          });
+          console.log('Auto-play started for session');
         } catch (error) {
           console.error('Auto-play failed:', error);
           alert(`Auto-play failed: ${error.message}. Please click play manually.`);

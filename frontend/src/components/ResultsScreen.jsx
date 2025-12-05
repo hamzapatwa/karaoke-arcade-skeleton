@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Leaderboard from './Leaderboard';
 
 export default function ResultsScreen({ sessionId, results: propResults, apiBase, onNewSession, playerName, onPlayerNameChange }) {
@@ -16,7 +16,7 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
     }
   }, [sessionId, propResults]);
 
-  const loadResults = async () => {
+  const loadResults = useCallback(async () => {
     try {
       const response = await fetch(`${apiBase}/sessions/${sessionId}/results`);
       const data = await response.json();
@@ -26,9 +26,9 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBase, sessionId]);
 
-  const submitToLeaderboard = async () => {
+  const submitToLeaderboard = useCallback(async () => {
     if (!playerName.trim()) {
       alert('Please enter your name!');
       return;
@@ -54,16 +54,17 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
       console.error('Failed to submit to leaderboard:', error);
       alert('Failed to submit to leaderboard');
     }
-  };
+  }, [apiBase, sessionId, playerName, results]);
 
-  const getScoreColor = (score) => {
-    if (score >= 90) return '#39ff14'; // Green
-    if (score >= 70) return '#ffd700'; // Gold
-    if (score >= 50) return '#ff9500'; // Orange
-    return '#ff3d00'; // Red
-  };
+  // Memoize score calculations
+  const getScoreColor = useCallback((score) => {
+    if (score >= 90) return '#39ff14';
+    if (score >= 70) return '#ffd700';
+    if (score >= 50) return '#ff9500';
+    return '#ff3d00';
+  }, []);
 
-  const getScoreGrade = (score) => {
+  const getScoreGrade = useCallback((score) => {
     if (score >= 95) return 'S+';
     if (score >= 90) return 'S';
     if (score >= 85) return 'A+';
@@ -74,7 +75,7 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
     if (score >= 60) return 'C';
     if (score >= 50) return 'D';
     return 'F';
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -183,24 +184,21 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                 <h3>Pitch Timeline</h3>
                 <div className="chart">
                   <svg width="100%" height="200" viewBox="0 0 1000 100" preserveAspectRatio="none" className="pitch-chart">
-                    {(() => {
+                    {useMemo(() => {
                       const pitchData = results.graphs.pitchTimeline || [];
                       if (pitchData.length === 0) return null;
 
-                      const maxTime = Math.max(...pitchData.map(p => p.time || 0)) || 1;
-                      const minTime = Math.min(...pitchData.map(p => p.time || 0)) || 0;
+                      const times = pitchData.map(p => p.time || 0);
+                      const maxTime = Math.max(...times) || 1;
+                      const minTime = Math.min(...times) || 0;
                       const timeRange = maxTime - minTime;
-
-                      console.log('Pitch data points:', pitchData.length, 'maxTime:', maxTime, 'minTime:', minTime, 'range:', timeRange);
-
-                      // If time range is too small (< 2 seconds), use index-based positioning
                       const useIndex = timeRange < 2;
 
                       return pitchData.map((point, index) => {
                         const x = useIndex
                           ? (index / (pitchData.length - 1 || 1)) * 1000
                           : ((point.time - minTime) / timeRange) * 1000;
-                        const y = 90 - ((point.score || 0) / 100) * 80; // Map score 0-100 to y 90-10
+                        const y = 90 - ((point.score || 0) / 100) * 80;
                         return (
                           <circle
                             key={index}
@@ -212,7 +210,7 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                           />
                         );
                       });
-                    })()}
+                    }, [results])}
                   </svg>
                 </div>
               </div>
@@ -221,18 +219,16 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                 <h3>Energy Graph</h3>
                 <div className="chart">
                   <svg width="100%" height="200" viewBox="0 0 1000 100" preserveAspectRatio="none" className="energy-chart">
-                    {(() => {
+                    {useMemo(() => {
                       const energyData = results.graphs.energyGraph || [];
                       if (energyData.length === 0) return null;
 
-                      const maxTime = Math.max(...energyData.map(p => p.time || 0)) || 1;
-                      const minTime = Math.min(...energyData.map(p => p.time || 0)) || 0;
+                      const times = energyData.map(p => p.time || 0);
+                      const energies = energyData.map(p => p.energy || 0);
+                      const maxTime = Math.max(...times) || 1;
+                      const minTime = Math.min(...times) || 0;
                       const timeRange = maxTime - minTime;
-                      const maxEnergy = Math.max(...energyData.map(p => p.energy || 0)) || 1;
-
-                      console.log('Energy data points:', energyData.length, 'maxTime:', maxTime, 'minTime:', minTime, 'range:', timeRange, 'maxEnergy:', maxEnergy);
-
-                      // If time range is too small (< 2 seconds), use index-based positioning
+                      const maxEnergy = Math.max(...energies) || 1;
                       const useIndex = timeRange < 2;
 
                       const points = energyData.map((point, index) => {
@@ -240,7 +236,7 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                           ? (index / (energyData.length - 1 || 1)) * 1000
                           : ((point.time - minTime) / timeRange) * 1000;
                         const normalizedEnergy = (point.energy || 0) / maxEnergy;
-                        const y = 90 - (normalizedEnergy * 80); // Map normalized energy to y 90-10
+                        const y = 90 - (normalizedEnergy * 80);
                         return `${x},${y}`;
                       }).join(' ');
 
@@ -252,7 +248,7 @@ export default function ResultsScreen({ sessionId, results: propResults, apiBase
                           strokeWidth="2"
                         />
                       );
-                    })()}
+                    }, [results])}
                   </svg>
                 </div>
               </div>

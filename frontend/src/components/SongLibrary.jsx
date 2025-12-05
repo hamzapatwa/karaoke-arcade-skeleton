@@ -4,7 +4,6 @@ export default function SongLibrary({ onSongSelect, apiBase }) {
   const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSong, setSelectedSong] = useState(null);
-  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     loadLibrary();
@@ -30,7 +29,7 @@ export default function SongLibrary({ onSongSelect, apiBase }) {
         console.error('Failed to load song details:', err.error || response.statusText);
         alert(`Failed to load song: ${err.error || response.statusText}`);
         return;
-        }
+      }
       const songData = await response.json();
       setSelectedSong(songData);
       onSongSelect(songData);
@@ -68,8 +67,6 @@ export default function SongLibrary({ onSongSelect, apiBase }) {
           </button>
         </div>
       </div>
-
-      {/* Upload removed in voice-only refactor */}
 
       <div className="library-content">
         {songs.length === 0 ? (

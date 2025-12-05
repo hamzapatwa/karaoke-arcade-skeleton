@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import './styles/retro.css';
 import './styles/video-karaoke.css';
 import SongLibrary from './components/SongLibrary';
@@ -6,7 +6,6 @@ import VideoKaraokePlayer from './components/VideoKaraokePlayer';
 import LiveHUD from './components/LiveHUD';
 import MicCheck from './components/MicCheck';
 import ResultsScreen from './components/ResultsScreen';
-import Leaderboard from './components/Leaderboard';
 
 const API_BASE = 'http://localhost:8080';
 
@@ -18,8 +17,6 @@ function App() {
   const [videoTime, setVideoTime] = useState(0);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [sessionResults, setSessionResults] = useState(null);
-
-  // WebSocket removed in voice-only refactor
 
   const handleSongSelect = (songData) => {
     setSelectedSong(songData);
@@ -74,7 +71,6 @@ function App() {
     setPlayerName('');
     setIsSessionActive(false);
     setSessionResults(null);
-    // No WebSocket to close
   };
 
   const renderCurrentScreen = () => {
@@ -91,7 +87,6 @@ function App() {
         return (
           <MicCheck
             onComplete={handleMicCheckComplete}
-            wsUrl={`ws://localhost:8080/session/${sessionId}`}
           />
         );
 
@@ -158,9 +153,6 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1 className="neon-title">🎤 PitchPerfectly 🎤</h1>
-        <div className="status-indicators">
-          {/* LIVE/OFFLINE indicator removed */}
-        </div>
       </header>
 
       <main className="app-main">

@@ -4,12 +4,10 @@ export default function MicCheck({ onComplete }) {
   const [micPermission, setMicPermission] = useState(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [isListening, setIsListening] = useState(false);
-  // Webcam removed in voice-only refactor
 
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const microphoneRef = useRef(null);
-  const webcamRef = useRef(null);
   const animationFrameRef = useRef(null);
 
   useEffect(() => {
@@ -40,25 +38,18 @@ export default function MicCheck({ onComplete }) {
 
   const setupAudioAnalysis = (stream) => {
     try {
-      console.log('Setting up audio analysis with stream:', stream);
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      // Ensure context is running (Chrome/Safari may start suspended)
+
       if (audioContextRef.current.state === 'suspended') {
         audioContextRef.current.resume().catch(() => {});
       }
+
       analyserRef.current = audioContextRef.current.createAnalyser();
-
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-
       analyserRef.current.fftSize = 256;
       analyserRef.current.smoothingTimeConstant = 0.8;
 
-      console.log('Audio analyser configured:', {
-        fftSize: analyserRef.current.fftSize,
-        frequencyBinCount: analyserRef.current.frequencyBinCount,
-        sampleRate: audioContextRef.current.sampleRate
-      });
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
 
       startAudioLevelMonitoring();
     } catch (error) {
@@ -72,7 +63,6 @@ export default function MicCheck({ onComplete }) {
 
     const updateLevel = () => {
       if (analyserRef.current) {
-        // Use both frequency and time-domain for more robust detection
         analyserRef.current.getByteFrequencyData(freqArray);
         analyserRef.current.getByteTimeDomainData(timeArray);
 
@@ -81,33 +71,20 @@ export default function MicCheck({ onComplete }) {
         for (let i = 0; i < freqArray.length; i++) {
           sumFreq += freqArray[i] * freqArray[i];
         }
-        const rmsFreq = Math.sqrt(sumFreq / Math.max(1, freqArray.length));
+        const rmsFreq = Math.sqrt(sumFreq / freqArray.length);
 
-        // Time-domain RMS around 128 midpoint (8-bit PCM)
+        // Time-domain RMS
         let sumTime = 0;
         for (let i = 0; i < timeArray.length; i++) {
           const centered = timeArray[i] - 128;
           sumTime += centered * centered;
         }
-        const rmsTime = Math.sqrt(sumTime / Math.max(1, timeArray.length));
+        const rmsTime = Math.sqrt(sumTime / timeArray.length);
 
-        // Combine and increase sensitivity
-        const rms = Math.max(rmsFreq / 2, rmsTime);
+        // Combine and normalize
+        const rms = Math.max(rmsFreq * 0.5, rmsTime);
         const normalizedLevel = Math.min(rms / 32, 1);
-
-        // Lower floor so it moves off 5% even with quieter mics
         const displayLevel = Math.max(normalizedLevel, 0.02);
-
-        // Debug logging (remove in production)
-        if (Math.random() < 0.01) { // Log 1% of the time to avoid spam
-          console.log('Audio level debug:', {
-            rmsFreq,
-            rmsTime,
-            rms,
-            normalizedLevel,
-            displayLevel
-          });
-        }
 
         setAudioLevel(displayLevel);
         animationFrameRef.current = requestAnimationFrame(updateLevel);
@@ -117,19 +94,9 @@ export default function MicCheck({ onComplete }) {
     updateLevel();
   };
 
-  // Motion/webcam removed
-
-  const startListening = () => {
-    setIsListening(true);
-  };
-
-  const stopListening = () => {
-    setIsListening(false);
-  };
-
-  const proceedToLive = () => {
-    onComplete();
-  };
+  const startListening = () => setIsListening(true);
+  const stopListening = () => setIsListening(false);
+  const proceedToLive = () => onComplete();
 
   const getAudioLevelColor = () => {
     if (audioLevel < 0.1) return '#ff3d00'; // Red - too quiet
@@ -219,14 +186,11 @@ export default function MicCheck({ onComplete }) {
           )}
         </div>
 
-        {/* Motion/webcam removed */}
-
         {/* Instructions */}
         <div className="instructions">
           <h4>Instructions:</h4>
           <ul>
             <li>🎤 Enable microphone and test your audio levels</li>
-            <li>📹 Optionally enable motion tracking for bonus points</li>
             <li>🎵 Sing a few notes to test your setup</li>
             <li>✨ When ready, proceed to the live performance!</li>
           </ul>

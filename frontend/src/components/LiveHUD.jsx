@@ -264,18 +264,26 @@ const LiveHUD = ({
       ? calculatePitchScore(frequency, confidence, refData, currentTime)
       : null;
 
-    // Calculate energy score
-    const energyScore = calculateEnergyScore(energy, refData);
+    // Calculate energy score (only when we have reliable audio input)
+    // Ignore energy scoring during silent portions (frequency: 0, confidence: 0)
+    const energyScore = hasReliablePitch
+      ? calculateEnergyScore(energy, refData)
+      : null;
 
-    // Update combo (normalize weights if pitch not available)
+    // Update combo (normalize weights if pitch/energy not available)
     const pitchWeight = pitchScore === null ? 0 : SCORING_CONFIG.PITCH_WEIGHT;
-    const totalWeight = pitchWeight + SCORING_CONFIG.ENERGY_WEIGHT;
-    const totalFrameScore = (
-      (pitchScore ?? 0) * pitchWeight +
-      energyScore * SCORING_CONFIG.ENERGY_WEIGHT
-    ) / totalWeight;
+    const energyWeight = energyScore === null ? 0 : SCORING_CONFIG.ENERGY_WEIGHT;
+    const totalWeight = pitchWeight + energyWeight;
 
-    updateCombo(totalFrameScore);
+    // Only calculate frame score if we have at least one valid component
+    const totalFrameScore = totalWeight > 0
+      ? ((pitchScore ?? 0) * pitchWeight + (energyScore ?? 0) * energyWeight) / totalWeight
+      : null;
+
+    // Only update combo if we have a valid frame score
+    if (totalFrameScore !== null) {
+      updateCombo(totalFrameScore);
+    }
 
     // Store performance data with size limit to prevent memory bloat
     const MAX_SAMPLES = 10000; // Limit to ~3-4 minutes at 50fps
@@ -309,11 +317,15 @@ const LiveHUD = ({
 
     // Update scores (with EMA smoothing)
     setCurrentScore(prev => ({
-      total: smoothValue(prev.total, totalFrameScore * 100, SCORING_CONFIG.EMA_ALPHA),
+      total: totalFrameScore !== null
+        ? smoothValue(prev.total, totalFrameScore * 100, SCORING_CONFIG.EMA_ALPHA)
+        : prev.total,
       pitch: pitchScore !== null
         ? smoothValue(prev.pitch, pitchScore * 100, SCORING_CONFIG.EMA_ALPHA)
         : prev.pitch,
-      energy: smoothValue(prev.energy, energyScore * 100, SCORING_CONFIG.EMA_ALPHA)
+      energy: energyScore !== null
+        ? smoothValue(prev.energy, energyScore * 100, SCORING_CONFIG.EMA_ALPHA)
+        : prev.energy
     }));
 
   }, [referenceData, externalTime]);
@@ -579,41 +591,33 @@ const LiveHUD = ({
   };
 
   /**
-   * Render HUD canvas
+   * Render HUD canvas (optimized with reduced re-renders)
    */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Disable alpha for better performance
     const width = canvas.width;
     const height = canvas.height;
 
     let animationFrameId = null;
     let lastRenderTime = 0;
-    const targetFPS = 60;
+    const targetFPS = 30; // Reduced from 60 to 30 for better performance
     const frameInterval = 1000 / targetFPS;
 
     // Animation loop with FPS limiting
     const render = (currentTime) => {
-        // Throttle to target FPS to reduce GPU load
-        if (currentTime - lastRenderTime >= frameInterval) {
-          // Clear canvas efficiently (clearRect is faster than fillRect)
-          ctx.clearRect(0, 0, width, height);
-          // Fill background
-          ctx.fillStyle = '#000';
-          ctx.fillRect(0, 0, width, height);
+      // Throttle to target FPS to reduce GPU load
+      if (currentTime - lastRenderTime >= frameInterval) {
+        // Clear and fill background in one operation
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
 
-        // Draw note lane
+        // Draw all components
         drawNoteLane(ctx, width, height);
-
-        // Draw cents error bar
         drawCentsErrorBar(ctx, width, height);
-
-        // Draw combo
         drawCombo(ctx, width, height);
-
-        // Draw scores
         drawScores(ctx, width, height);
 
         lastRenderTime = currentTime;
@@ -667,22 +671,20 @@ const LiveHUD = ({
 
     if (!referenceData || !referenceData.f0_ref_on_k) return;
 
-    // Get notes in the visible time window (past and future)
-    // Use binary search for better performance on large arrays
-    const lookAheadTime = 3.0; // Show 3 seconds ahead
-    const lookBackTime = 0.5;  // Show 0.5 seconds behind
+    // Get notes in the visible time window (optimized with binary search)
+    const lookAheadTime = 3.0;
+    const lookBackTime = 0.5;
     const currentTime = externalTime;
     const timeMin = currentTime - lookBackTime;
     const timeMax = currentTime + lookAheadTime;
 
-    // Binary search for start index (first note >= timeMin)
     const notes = referenceData.f0_ref_on_k;
+
+    // Binary search for start index
     let startIdx = 0;
     let endIdx = notes.length;
-
-    // Find start index
     while (startIdx < endIdx) {
-      const mid = Math.floor((startIdx + endIdx) / 2);
+      const mid = (startIdx + endIdx) >> 1; // Bit shift for faster division
       if (notes[mid].t < timeMin) {
         startIdx = mid + 1;
       } else {
@@ -690,11 +692,11 @@ const LiveHUD = ({
       }
     }
 
-    // Find end index (first note > timeMax)
+    // Binary search for end index
     endIdx = notes.length;
     let searchStart = startIdx;
     while (searchStart < endIdx) {
-      const mid = Math.floor((searchStart + endIdx) / 2);
+      const mid = (searchStart + endIdx) >> 1;
       if (notes[mid].t <= timeMax) {
         searchStart = mid + 1;
       } else {
@@ -702,7 +704,7 @@ const LiveHUD = ({
       }
     }
 
-    // Filter visible notes (only check conf and f0, time already filtered)
+    // Filter visible notes with confidence threshold
     const visibleNotes = [];
     for (let i = startIdx; i < endIdx; i++) {
       const note = notes[i];
@@ -711,11 +713,14 @@ const LiveHUD = ({
       }
     }
 
-    // Group consecutive notes with similar pitch into note blocks
+    // Group consecutive notes with similar pitch into note blocks (optimized)
     const noteBlocks = [];
     let currentBlock = null;
+    const LOG2_CONST = 1200; // Pre-calculate constant
 
-    visibleNotes.forEach(note => {
+    for (let i = 0; i < visibleNotes.length; i++) {
+      const note = visibleNotes[i];
+
       if (!currentBlock) {
         currentBlock = {
           startTime: note.t,
@@ -725,15 +730,12 @@ const LiveHUD = ({
         };
       } else {
         const timeGap = note.t - currentBlock.endTime;
-        const freqDiff = Math.abs(1200 * Math.log2(note.f0 / currentBlock.f0));
+        const freqDiff = Math.abs(LOG2_CONST * Math.log2(note.f0 / currentBlock.f0));
 
-        // If gap is small (< 0.1s) and pitch is similar (< 50 cents), extend block
         if (timeGap < 0.1 && freqDiff < 50) {
           currentBlock.endTime = note.t;
-          // Update f0 to median of block
-          currentBlock.f0 = (currentBlock.f0 + note.f0) / 2;
+          currentBlock.f0 = (currentBlock.f0 + note.f0) * 0.5; // Faster than division
         } else {
-          // Save current block and start new one
           noteBlocks.push(currentBlock);
           currentBlock = {
             startTime: note.t,
@@ -743,7 +745,8 @@ const LiveHUD = ({
           };
         }
       }
-    });
+    }
+
     if (currentBlock) {
       noteBlocks.push(currentBlock);
     }
@@ -1074,23 +1077,23 @@ const LiveHUD = ({
   };
 
   /**
-   * Helper functions for calculations
+   * Helper functions for calculations (memoized for performance)
    */
-  const filterValid = (arr) => arr.filter((val) => typeof val === 'number' && Number.isFinite(val));
+  const filterValid = useCallback((arr) => arr.filter((val) => typeof val === 'number' && Number.isFinite(val)), []);
 
-  const average = (arr) => {
+  const average = useCallback((arr) => {
     const valid = filterValid(arr);
     if (valid.length === 0) return 0;
     return valid.reduce((sum, val) => sum + val, 0) / valid.length;
-  };
+  }, [filterValid]);
 
-  const stdDev = (arr) => {
+  const stdDev = useCallback((arr) => {
     const valid = filterValid(arr);
     if (valid.length === 0) return 0;
     const avg = average(valid);
     const variance = valid.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / valid.length;
     return Math.sqrt(variance);
-  };
+  }, [filterValid, average]);
 
   /**
    * Compute final results when session ends

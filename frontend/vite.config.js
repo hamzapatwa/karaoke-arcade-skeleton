@@ -23,13 +23,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          tensorflow: ['@tensorflow/tfjs']
+          vendor: ['react', 'react-dom']
         }
       }
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', '@tensorflow/tfjs']
+    include: ['react', 'react-dom']
   }
 });

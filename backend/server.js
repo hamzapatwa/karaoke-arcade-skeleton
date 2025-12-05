@@ -7,6 +7,7 @@ import sqlite3 from 'sqlite3';
 import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import { createReadStream } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -436,138 +437,108 @@ app.get('/songs/:id/status', (req, res) => {
   );
 });
 
+// Removed duplicate /songs endpoint - use /library instead
+
 /**
- * Get song library
- * GET /songs
+ * Helper: Check if file exists
  */
-app.get('/songs', (req, res) => {
-  db.all(
-    'SELECT * FROM songs WHERE preprocessing_status = ? ORDER BY created_at DESC',
-    ['complete'],
-    async (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-      // Load reference data for each song
-      const songs = [];
+/**
+ * Helper: Load song data with assets validation
+ */
+async function loadSongData(songId, dbRow = null) {
+  const songsDir = path.join(__dirname, '../songs');
+  const refPath = path.join(songsDir, songId, 'reference.json');
+  const videoPath = path.join(songsDir, songId, 'karaoke.mp4');
+  const vocalsPath = path.join(songsDir, songId, 'vocals.wav');
 
-      for (const row of rows) {
-        try {
-          const referencePath = path.join(__dirname, '../songs', row.id, 'reference.json');
-          const referenceData = JSON.parse(await fs.readFile(referencePath, 'utf8'));
+  // Validate required assets
+  if (!(await fileExists(refPath)) || !(await fileExists(videoPath))) {
+    return null;
+  }
 
-          songs.push({
-            song_id: row.id,
-            name: row.name,
-            duration: row.duration,
-            tempo: row.tempo,
-            key: row.key,
-            reference_data: referenceData,
-            karaoke_video: `/video/${row.id}/karaoke.mp4`
-          });
-        } catch (error) {
-          console.error(`Failed to load reference for ${row.id}:`, error);
-        }
-      }
+  // Load reference data
+  let referenceData = null;
+  try {
+    referenceData = JSON.parse(await fs.readFile(refPath, 'utf8'));
+  } catch (error) {
+    console.error(`Failed to parse reference for ${songId}:`, error);
+    return null;
+  }
 
-      res.json(songs);
-    }
-  );
-});
+  const hasVocals = await fileExists(vocalsPath);
+
+  return {
+    id: songId,
+    name: dbRow?.name || songId,
+    duration: dbRow?.duration || referenceData?.duration || null,
+    tempo: dbRow?.tempo || referenceData?.tempo || null,
+    key: dbRow?.key || referenceData?.key || null,
+    uploaded_at: dbRow?.created_at || null,
+    karaoke_video: `/video/${songId}/karaoke.mp4`,
+    reference_vocals: hasVocals ? `/audio/${songId}/vocals.wav` : null,
+    reference_data: referenceData
+  };
+}
 
 /**
  * Get library (simplified song list for frontend)
  * GET /library
  */
-app.get('/library', (req, res) => {
-  db.all(
-    'SELECT * FROM songs WHERE preprocessing_status = ? ORDER BY created_at DESC',
-    ['complete'],
-    async (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
+app.get('/library', async (req, res) => {
+  try {
+    // Get all complete songs from DB
+    const rows = await new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM songs WHERE preprocessing_status = ? ORDER BY created_at DESC',
+        ['complete'],
+        (err, rows) => err ? reject(err) : resolve(rows)
+      );
+    });
+
+    const songs = [];
+    const included = new Set();
+
+    // Load DB songs with asset validation
+    for (const row of rows) {
+      const songData = await loadSongData(row.id, row);
+      if (songData) {
+        delete songData.reference_data; // Don't include full reference in list
+        songs.push(songData);
+        included.add(row.id);
+      } else {
+        console.warn(`Skipping incomplete song ${row.id}: missing assets`);
       }
-
-      // Return simplified song data for library, but only include entries with existing assets
-      const songs = [];
-      const included = new Set();
-
-      for (const row of rows) {
-        try {
-          const refPath = path.join(__dirname, '../songs', row.id, 'reference.json');
-          const videoPath = path.join(__dirname, '../songs', row.id, 'karaoke.mp4');
-          await fs.access(refPath);
-          await fs.access(videoPath);
-
-          // Optional reference vocals
-          const vocalsPath = path.join(__dirname, '../songs', row.id, 'vocals.wav');
-          let hasVocals = false;
-          try { await fs.access(vocalsPath); hasVocals = true; } catch {}
-
-          songs.push({
-            id: row.id,
-            name: row.name,
-            duration: row.duration,
-            tempo: row.tempo,
-            key: row.key,
-            uploaded_at: row.created_at,
-            karaoke_video: `/video/${row.id}/karaoke.mp4`,
-            reference_vocals: hasVocals ? `/audio/${row.id}/vocals.wav` : null
-          });
-          included.add(row.id);
-        } catch (e) {
-          console.warn(`Skipping incomplete song ${row.id}: missing assets`);
-        }
-      }
-
-      // Also scan filesystem for any song folders with required assets even if DB is missing/not-complete
-      try {
-        const songsDir = path.join(__dirname, '../songs');
-        const entries = await fs.readdir(songsDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isDirectory()) continue;
-          const id = entry.name;
-          if (included.has(id)) continue;
-
-          const refPath = path.join(songsDir, id, 'reference.json');
-          const videoPath = path.join(songsDir, id, 'karaoke.mp4');
-
-          try {
-            await fs.access(refPath);
-            await fs.access(videoPath);
-
-            // Try to read reference for duration/tempo/key
-            let referenceData = null;
-            try {
-              referenceData = JSON.parse(await fs.readFile(refPath, 'utf8'));
-            } catch {}
-
-            // Optional reference vocals
-            const vocalsPath = path.join(songsDir, id, 'vocals.wav');
-            let hasVocals = false;
-            try { await fs.access(vocalsPath); hasVocals = true; } catch {}
-
-            songs.push({
-              id,
-              name: rows.find(r => r.id === id)?.name || id,
-              duration: referenceData?.duration || null,
-              tempo: referenceData?.tempo || null,
-              key: referenceData?.key || null,
-              uploaded_at: rows.find(r => r.id === id)?.created_at || null,
-              karaoke_video: `/video/${id}/karaoke.mp4`,
-              reference_vocals: hasVocals ? `/audio/${id}/vocals.wav` : null
-            });
-            included.add(id);
-          } catch {}
-        }
-      } catch (scanErr) {
-        console.warn('Failed to scan songs directory:', scanErr);
-      }
-
-      res.json(songs);
     }
-  );
+
+    // Scan filesystem for songs not in DB
+    const songsDir = path.join(__dirname, '../songs');
+    const entries = await fs.readdir(songsDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || included.has(entry.name)) continue;
+
+      const songData = await loadSongData(entry.name);
+      if (songData) {
+        delete songData.reference_data;
+        songs.push(songData);
+        included.add(entry.name);
+      }
+    }
+
+    res.json(songs);
+  } catch (error) {
+    console.error('Library error:', error);
+    res.status(500).json({ error: 'Failed to load library' });
+  }
 });
 
 /**
@@ -577,110 +548,31 @@ app.get('/library', (req, res) => {
 app.get('/library/:id', async (req, res) => {
   const songId = req.params.id;
 
-  db.get(
-    'SELECT * FROM songs WHERE id = ? AND preprocessing_status = ?',
-    [songId, 'complete'],
-    async (err, row) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+  try {
+    // Try to get from DB first
+    const row = await new Promise((resolve, reject) => {
+      db.get(
+        'SELECT * FROM songs WHERE id = ? AND preprocessing_status = ?',
+        [songId, 'complete'],
+        (err, row) => err ? reject(err) : resolve(row)
+      );
+    }).catch(() => null);
 
-      // If DB row is not found/complete, still try to serve from disk if assets exist
-      const effectiveId = row?.id || songId;
+    // Load song data (works with or without DB row)
+    const songData = await loadSongData(songId, row);
 
-      try {
-        const referencePath = path.join(__dirname, '../songs', effectiveId, 'reference.json');
-        const videoPath = path.join(__dirname, '../songs', effectiveId, 'karaoke.mp4');
-
-        // Validate assets exist
-        try {
-          await fs.access(referencePath);
-        } catch {
-          return res.status(404).json({ error: 'Missing reference data' });
-        }
-
-        try {
-          await fs.access(videoPath);
-        } catch {
-          return res.status(404).json({ error: 'Missing karaoke video' });
-        }
-
-        const referenceData = JSON.parse(await fs.readFile(referencePath, 'utf8'));
-
-        // Optional reference vocals
-        const vocalsPath = path.join(__dirname, '../songs', effectiveId, 'vocals.wav');
-        let hasVocals = false;
-        try { await fs.access(vocalsPath); hasVocals = true; } catch {}
-
-        res.json({
-          id: effectiveId,
-          name: row?.name || effectiveId,
-          duration: row?.duration || referenceData?.duration,
-          tempo: row?.tempo || referenceData?.tempo,
-          key: row?.key || referenceData?.key,
-          uploaded_at: row?.created_at || null,
-          reference_data: referenceData,
-          karaoke_video: `/video/${effectiveId}/karaoke.mp4`,
-          reference_vocals: hasVocals ? `/audio/${effectiveId}/vocals.wav` : null
-        });
-      } catch (error) {
-        console.error(`Failed to load reference for ${effectiveId}:`, error);
-        res.status(500).json({ error: 'Failed to load song data' });
-      }
+    if (!songData) {
+      return res.status(404).json({ error: 'Song not found or incomplete' });
     }
-  );
+
+    res.json(songData);
+  } catch (error) {
+    console.error(`Failed to load song ${songId}:`, error);
+    res.status(500).json({ error: 'Failed to load song data' });
+  }
 });
 
-/**
- * Get single song
- * GET /songs/:id
- */
-app.get('/songs/:id', async (req, res) => {
-  const songId = req.params.id;
-
-  db.get('SELECT * FROM songs WHERE id = ?', [songId], async (err, row) => {
-    if (err || !row) {
-      return res.status(404).json({ error: 'Song not found' });
-    }
-
-    try {
-      const referencePath = path.join(__dirname, '../songs', songId, 'reference.json');
-      const videoPath = path.join(__dirname, '../songs', songId, 'karaoke.mp4');
-
-      try {
-        await fs.access(referencePath);
-      } catch {
-        return res.status(404).json({ error: 'Missing reference data' });
-      }
-
-      try {
-        await fs.access(videoPath);
-      } catch {
-        return res.status(404).json({ error: 'Missing karaoke video' });
-      }
-
-      const referenceData = JSON.parse(await fs.readFile(referencePath, 'utf8'));
-
-      // Optional reference vocals
-      const vocalsPath = path.join(__dirname, '../songs', songId, 'vocals.wav');
-      let hasVocals = false;
-      try { await fs.access(vocalsPath); hasVocals = true; } catch {}
-
-      res.json({
-        song_id: row.id,
-        name: row.name,
-        duration: row.duration,
-        tempo: row.tempo,
-        key: row.key,
-        reference_data: referenceData,
-        karaoke_video: `/video/${row.id}/karaoke.mp4`,
-        reference_vocals: hasVocals ? `/audio/${row.id}/vocals.wav` : null
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to load song data' });
-    }
-  });
-});
+// Removed duplicate /songs/:id endpoint - use /library/:id instead
 
 /**
  * Serve audio files (e.g., reference vocals) with range support
@@ -714,7 +606,7 @@ app.get('/audio/:song_id/:filename', async (req, res) => {
         'Content-Type': contentType
       });
 
-      const stream = (await import('fs')).createReadStream(audioPath, { start, end });
+      const stream = createReadStream(audioPath, { start, end });
       stream.pipe(res);
     } else {
       res.writeHead(200, {
@@ -722,7 +614,7 @@ app.get('/audio/:song_id/:filename', async (req, res) => {
         'Content-Type': contentType
       });
 
-      const stream = (await import('fs')).createReadStream(audioPath);
+      const stream = createReadStream(audioPath);
       stream.pipe(res);
     }
 
@@ -760,7 +652,7 @@ app.get('/video/:song_id/:filename', async (req, res) => {
         'Content-Type': 'video/mp4'
       });
 
-      const stream = (await import('fs')).createReadStream(videoPath, { start, end });
+      const stream = createReadStream(videoPath, { start, end });
       stream.pipe(res);
 
     } else {
@@ -769,7 +661,7 @@ app.get('/video/:song_id/:filename', async (req, res) => {
         'Content-Type': 'video/mp4'
       });
 
-      const stream = (await import('fs')).createReadStream(videoPath);
+      const stream = createReadStream(videoPath);
       stream.pipe(res);
     }
 

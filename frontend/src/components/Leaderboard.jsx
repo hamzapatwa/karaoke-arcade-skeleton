@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 export default function Leaderboard({ apiBase, onBack, onNewSession }) {
   const [leaderboard, setLeaderboard] = useState([]);
@@ -8,7 +8,7 @@ export default function Leaderboard({ apiBase, onBack, onNewSession }) {
     loadLeaderboard();
   }, []);
 
-  const loadLeaderboard = async () => {
+  const loadLeaderboard = useCallback(async () => {
     try {
       const response = await fetch(`${apiBase}/leaderboard?limit=20`);
       const data = await response.json();
@@ -18,26 +18,26 @@ export default function Leaderboard({ apiBase, onBack, onNewSession }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBase]);
 
-  const getRankIcon = (rank) => {
+  const getRankIcon = useCallback((rank) => {
     if (rank === 1) return '🥇';
     if (rank === 2) return '🥈';
     if (rank === 3) return '🥉';
     return `#${rank}`;
-  };
+  }, []);
 
-  const getScoreColor = (score) => {
+  const getScoreColor = useCallback((score) => {
     if (score >= 90) return '#39ff14';
     if (score >= 80) return '#ffd700';
     if (score >= 70) return '#ff9500';
     return '#ff3d00';
-  };
+  }, []);
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -137,10 +137,11 @@ export default function Leaderboard({ apiBase, onBack, onNewSession }) {
         <div className="stat">
           <span className="stat-label">AVERAGE SCORE</span>
           <span className="stat-value">
-            {leaderboard.length > 0
-              ? Math.round(leaderboard.reduce((sum, entry) => sum + entry.total_score, 0) / leaderboard.length)
-              : 0
-            }
+            {useMemo(() => {
+              if (leaderboard.length === 0) return 0;
+              const sum = leaderboard.reduce((acc, entry) => acc + entry.total_score, 0);
+              return Math.round(sum / leaderboard.length);
+            }, [leaderboard])}
           </span>
         </div>
       </div>
