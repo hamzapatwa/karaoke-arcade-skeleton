@@ -111,7 +111,7 @@ Open **http://localhost:8080** in your browser and start singing! 🎤
 
 ---
 
-## 🎯 How It Works
+## How It Works
 
 ### System Architecture Flow
 
@@ -351,7 +351,7 @@ Earn achievements based on your performance:
 
 ---
 
-## 🏗️ Technical Architecture
+## Technical Architecture
 
 ### Technology Stack
 
@@ -489,7 +489,7 @@ class PreprocessorConfig:
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -735,12 +735,12 @@ ffmpeg -i input.webm -c:v libx264 -preset fast output.mp4
 
 PitchPerfectly is designed with privacy as a core principle:
 
-- ✅ **100% Local Processing**: All audio analysis happens on your machine
-- ✅ **No Cloud Uploads**: Files never leave your computer
-- ✅ **No Analytics**: No tracking, telemetry, or usage data collection
-- ✅ **Explicit Permissions**: Microphone access requires user consent
-- ✅ **Local Storage Only**: SQLite database stored in `backend/karaoke.db`
-- ✅ **Open Source**: Full code transparency (MIT License)
+-  **100% Local Processing**: All audio analysis happens on your machine
+-  **No Cloud Uploads**: Files never leave your computer
+-  **No Analytics**: No tracking, telemetry, or usage data collection
+-  **Explicit Permissions**: Microphone access requires user consent
+-  **Local Storage Only**: SQLite database stored in `backend/karaoke.db`
+-  **Open Source**: Full code transparency (MIT License)
 
 **Data Retention**: All performance data stored locally. Delete `backend/karaoke.db` and `sessions/` directory to remove all records.
 
@@ -764,11 +764,11 @@ docker-compose -f docker-compose.dev.yml up
 ```
 
 **Features**:
-- ✅ Source code mounted as volumes (edit locally, see changes instantly)
-- ✅ Frontend hot-reloads on save
-- ✅ Backend auto-restarts on file changes
-- ✅ Separate containers for frontend/backend
-- ✅ All data persists (songs, database, sessions)
+-  Source code mounted as volumes (edit locally, see changes instantly)
+-  Frontend hot-reloads on save
+-  Backend auto-restarts on file changes
+-  Separate containers for frontend/backend
+-  All data persists (songs, database, sessions)
 
 **Useful commands**:
 ```bash
