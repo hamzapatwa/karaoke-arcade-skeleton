@@ -190,7 +190,6 @@ The application consists of four main layers:
   - `multer ^1.4.5-lts.1`: File upload handling (multipart/form-data)
   - `sqlite3 ^5.1.6`: Database interface (callback-based API)
   - `uuid ^9.0.1`: Unique identifier generation (v4 UUIDs)
-  - `ws ^8.14.2`: WebSocket support (legacy, not actively used - WebSocket removed in voice-only refactor)
   - Scripts: `start` (node server.js), `dev` (node --watch server.js for auto-restart)
 
 - **`karaoke.db`**: SQLite database with three tables:
@@ -199,7 +198,6 @@ The application consists of four main layers:
   - `leaderboard`: Player scores and rankings
 
 - **`uploads/`**: Temporary storage for multipart file uploads (created by Multer)
-- **`references/`**: Legacy directory (not actively used, may contain old reference files)
 - **`server.log`**: Application logs (if logging to file is enabled)
 
 ### Frontend Layer (`/frontend/`)
@@ -224,15 +222,6 @@ The application consists of four main layers:
   - Mounts to `#root` div in index.html
 
 #### Component Architecture (`/frontend/src/components/`)
-
-**Note**: The `SongUpload.jsx` component exists in the codebase but is not used in the current application flow. Song upload functionality is handled via backend API or shell scripts rather than through the frontend UI.
-
-- **`SongUpload.jsx`**: Legacy upload component (138 lines) - **NOT CURRENTLY USED**
-  - File upload via drag-and-drop or file picker
-  - Upload progress tracking with progress bar
-  - Polling for analysis completion
-  - Designed for single audio file upload (not karaoke video + original audio pair)
-  - Would need significant refactoring to match current upload flow
 
 - **`VideoKaraokePlayer.jsx`**: Video playback engine (461 lines)
   - `requestVideoFrameCallback` for frame-accurate timing (fallback to `timeupdate` event)
@@ -274,7 +263,6 @@ The application consists of four main layers:
   - Audio level monitoring using AnalyserNode (FFT and time-domain RMS combined)
   - Real-time audio level visualization with color-coded feedback (red/yellow/green/pink)
   - Audio level text feedback (TOO QUIET/GETTING THERE/PERFECT/TOO LOUD)
-  - Motion tracking removed (voice-only refactor)
   - AudioContext state management (handles suspended state with auto-resume)
   - Start/stop listening controls
   - Proceed button disabled until microphone tested (audioLevel > 0.02)
@@ -899,7 +887,6 @@ SVG badge graphics (4 files):
 #### Utilities
 - **`uuid ^9.0.1`**: RFC4122 UUID generation
 - **Usage**: Unique identifiers for songs and sessions
-- **`ws ^8.14.2`**: WebSocket library (legacy, not actively used)
 
 ### Python Audio Processing
 
@@ -1123,8 +1110,6 @@ SVG badge graphics (4 files):
 - **Device Compatibility**: Inconsistent fallback behavior across platforms
 
 #### Technical Debt
-- **Mixed Architecture**: WebSocket infrastructure present but unused (removed in voice-only refactor)
-- **Legacy Code**: Some components reference removed features (rhythm scoring, motion tracking)
 - **Inconsistent Patterns**: Mix of async/await and Promise.then() patterns
 - **Database API**: Uses callback-based sqlite3 API instead of promises (wrapped in Promise constructors)
 - **Error Handling**: Inconsistent error handling across components (some silent failures)

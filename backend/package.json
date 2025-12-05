@@ -12,14 +12,12 @@
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1",
     "sqlite3": "^5.1.6",
-    "uuid": "^9.0.1",
-    "ws": "^8.14.2"
+    "uuid": "^9.0.1"
   },
   "keywords": [
     "karaoke",
     "audio",
-    "analysis",
-    "websocket"
+    "analysis"
   ],
   "author": "Karaoke Arcade Team",
   "license": "MIT"
