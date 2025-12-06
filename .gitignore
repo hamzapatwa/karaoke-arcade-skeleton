@@ -29,3 +29,5 @@ python/__pycache__
 
 .vscode/
 .DS_Store
+karaoke-key.pem
+deploy-aws-spot-complete.sh
