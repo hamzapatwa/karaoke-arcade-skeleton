@@ -114,6 +114,26 @@ const VideoKaraokePlayer = ({
       setDuration(video.duration);
       setVideoReady(true);
       console.log('Video ready:', video.duration, 'seconds');
+
+      // Explicitly enable audio tracks for Safari/Firefox
+      if (video.audioTracks && video.audioTracks.length > 0) {
+        console.log(`Found ${video.audioTracks.length} audio tracks`);
+        // Enable the first audio track explicitly
+        for (let i = 0; i < video.audioTracks.length; i++) {
+          video.audioTracks[i].enabled = (i === 0);
+        }
+        console.log('Audio track 0 enabled');
+      }
+
+      // Ensure video is not muted
+      if (video.muted) {
+        console.warn('Video was muted on load, unmuting...');
+        video.muted = false;
+      }
+
+      // Set initial volume
+      video.volume = volume;
+      console.log('Video volume set to:', volume);
     };
 
     const handlePlay = () => {
@@ -186,10 +206,11 @@ const VideoKaraokePlayer = ({
    * Set video volume
    */
   useEffect(() => {
-    if (videoRef.current) {
+    if (videoRef.current && videoReady) {
       videoRef.current.volume = volume;
+      console.log('Volume updated to:', volume);
     }
-  }, [volume]);
+  }, [volume, videoReady]);
 
   /**
    * Play/Pause toggle
