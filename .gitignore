@@ -31,3 +31,14 @@ python/__pycache__
 .DS_Store
 karaoke-key.pem
 deploy-aws-spot-complete.sh
+.aws-deployment-state-free-tier
+.aws-simple-deployment
+AWS-FREE-TIER-README.md
+cleanup-aws-free-tier.sh
+cleanup-aws-simple.sh
+deploy-aws-free-tier.sh
+deploy-aws-simple.sh
+karaoke-key-free.pem
+karaoke-simple-key.pem
+setup-https.sh
+update-aws.sh
